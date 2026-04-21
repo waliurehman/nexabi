@@ -27,7 +27,7 @@ const Query = () => {
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const apiKey = process.env.REACT_APP_GROQ_KEY || '';
+  const apiKey = process.env.REACT_APP_GROQ_API_KEY || '';
   const endRef = useRef(null);
   
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, isTyping]);

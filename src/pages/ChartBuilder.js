@@ -86,9 +86,9 @@ const ChartBuilder = () => {
   };
 
   const handleAiGenerate = async () => {
-    const apiKey = process.env.REACT_APP_GROQ_KEY;
+    const apiKey = process.env.REACT_APP_GROQ_API_KEY;
     if (!apiKey) {
-      setAiError("Groq API Key is not configured. Please add REACT_APP_GROQ_KEY to your .env file.");
+      setAiError("Groq API Key is not configured. Please add REACT_APP_GROQ_API_KEY to your .env file.");
       return;
     }
     if (!aiPrompt) return;
