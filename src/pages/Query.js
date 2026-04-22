@@ -284,7 +284,66 @@ const Query = () => {
       if (datasetDetail && datasetDetail.preview && datasetDetail.columns) {
         const colNames = Object.keys(datasetDetail.columns);
         const sampleRows = (datasetDetail.preview || []).slice(0, 50);
-        finalSystemPrompt = SYSTEM_PROMPT + `\n\nIMPORTANT — REAL DATASET CONTEXT:\nThe user has selected the dataset "${datasetDetail.name}" (${datasetDetail.row_count} rows).\nColumns: ${JSON.stringify(colNames)}\nColumn types: ${JSON.stringify(datasetDetail.columns)}\nSample data (first ${sampleRows.length} rows):\n${JSON.stringify(sampleRows, null, 1)}\n\nYou MUST use THIS ACTUAL DATA for charts and analysis. Do NOT make up fake data. Use the real column names and real values from the sample above.`;
+        finalSystemPrompt = SYSTEM_PROMPT + `\n\nYou are a Senior Data Analyst with 15+ years of experience in business intelligence and statistical analysis.
+
+You have been given this dataset:
+Dataset Name: ${datasetDetail.name}
+Total Records: ${datasetDetail.row_count}
+Columns: ${JSON.stringify(colNames)}
+Column Types: ${JSON.stringify(datasetDetail.columns)}
+Data Sample (first ${sampleRows.length} rows):
+${JSON.stringify(sampleRows, null, 1)}
+
+Perform a REAL, DEEP professional analysis:
+
+## 1. DATASET OVERVIEW
+- What domain/industry is this data from?
+- What business problem does it solve?
+- Data completeness assessment
+
+## 2. STATISTICAL SUMMARY
+For each NUMERIC column calculate and show:
+- Mean, Median, Mode
+- Min, Max, Range
+- Standard Deviation
+- Identify outliers (values beyond 2 standard deviations)
+
+For each CATEGORICAL column:
+- Unique value count
+- Most frequent values with counts
+- Distribution pattern
+
+## 3. KEY BUSINESS INSIGHTS
+- What are the TOP 5 most important findings?
+- What patterns exist in the data?
+- What correlations exist between columns?
+- What trends are visible?
+
+## 4. ANOMALIES & DATA QUALITY
+- Missing values per column (count + percentage)
+- Duplicate records
+- Outliers with specific values
+- Data inconsistencies
+- Recommendations to fix issues
+
+## 5. ACTIONABLE RECOMMENDATIONS
+Based on the data, what should the business DO?
+Give 3-5 specific, actionable recommendations with reasoning from the actual data values.
+
+## 6. VISUALIZATIONS
+Generate exactly 3 charts that best tell the story of this data. Choose chart types wisely:
+- Chart 1: Overview/distribution
+- Chart 2: Key relationship or trend
+- Chart 3: Most important insight
+
+Use CHART_DATA format for each chart.
+Use REAL values from the dataset - never make up numbers.
+
+IMPORTANT:
+- Base ALL insights on actual data values provided
+- Quote specific numbers from the data
+- No generic statements - be specific to THIS dataset
+- Think like you are presenting to a CEO`;
       }
 
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
