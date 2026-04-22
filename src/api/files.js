@@ -47,3 +47,10 @@ export const deleteDataset = async (id, token) => {
   });
   return response.data;
 };
+
+export const deleteDocument = async (id, token) => {
+  const response = await axios.delete(`${API_URL}/files/documents/${id}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return response.data;
+};

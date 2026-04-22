@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload as UploadIcon, FileSpreadsheet, File, FileText, Database, Plus, CheckCircle, Cloud, HardDrive, Trash2, RefreshCw, Table, Braces } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { uploadDataset, getDatasets, deleteDataset } from '../api/files';
+import { uploadDataset, uploadDocument, getDatasets, getDocuments, deleteDataset, deleteDocument } from '../api/files';
 
 const pageV = { initial:{opacity:0,y:16}, animate:{opacity:1,y:0,transition:{duration:0.4}}, exit:{opacity:0,y:-10} };
 const cardV = { initial:{opacity:0,y:20}, animate:(i)=>({opacity:1,y:0,transition:{delay:i*0.1,duration:0.4}}) };
@@ -46,18 +46,27 @@ const UploadPage = () => {
 
   const fetchFiles = async () => {
     try {
-      const data = await getDatasets(token);
-      const formatted = data.map(d => ({
-        id: d.id,
-        name: d.name || d.filename || 'Unknown File',
-        size: d.file_size || formatSize(d.size),
-        date: d.created_at ? new Date(d.created_at).toLocaleDateString() : new Date().toLocaleDateString(),
-        progress: 100,
-        status: 'complete'
-      }));
+      const [datasets, documents] = await Promise.all([
+        getDatasets(token).catch(() => []),
+        getDocuments(token).catch(() => [])
+      ]);
+      const allFiles = [...datasets, ...documents].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+      
+      const formatted = allFiles.map(d => {
+        const ext = (d.file_type || (d.name || d.filename || '').split('.').pop() || '').toLowerCase();
+        return {
+          id: d.id,
+          name: d.name || d.filename || 'Unknown File',
+          size: d.file_size || formatSize(d.size),
+          date: d.created_at ? new Date(d.created_at).toLocaleDateString() : new Date().toLocaleDateString(),
+          progress: 100,
+          status: 'complete',
+          isDocument: ['pdf', 'doc', 'docx', 'ppt', 'pptx'].includes(ext)
+        };
+      });
       setFiles(formatted);
     } catch (error) {
-      console.error("Error fetching datasets:", error);
+      console.error("Error fetching files:", error);
     }
   };
 
@@ -72,19 +81,29 @@ const UploadPage = () => {
 
   const handleFile = async (file) => {
     if (!file) return;
-    const tempId = Date.now();
     
-    setFiles(prev => [...prev, {
+    if (file.size > 50 * 1024 * 1024) {
+      alert("File is greater than 50 MB");
+      return;
+    }
+    
+    const tempId = Date.now();
+    const ext = file.name.split('.').pop().toLowerCase();
+    const isDoc = ['pdf', 'doc', 'docx', 'ppt', 'pptx'].includes(ext);
+    
+    setFiles(prev => [{
       id: tempId,
       name: file.name,
       size: formatSize(file.size),
       date: new Date().toLocaleDateString(),
       progress: 0,
-      status: 'uploading'
-    }]);
+      status: 'uploading',
+      isDocument: isDoc
+    }, ...prev]);
 
     try {
-      await uploadDataset(file, token, (progressEvent) => {
+      const uploadFn = isDoc ? uploadDocument : uploadDataset;
+      await uploadFn(file, token, (progressEvent) => {
         const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
         setFiles(prev => prev.map(f => f.id === tempId ? { ...f, progress: percentCompleted } : f));
       });
@@ -113,7 +132,11 @@ const UploadPage = () => {
     if (fileObj.status === 'uploading') return;
     try {
       if (fileObj.id && fileObj.status === 'complete') {
-        await deleteDataset(fileObj.id, token);
+        if (fileObj.isDocument) {
+          await deleteDocument(fileObj.id, token);
+        } else {
+          await deleteDataset(fileObj.id, token);
+        }
       }
       setFiles(prev => prev.filter(f => f.id !== fileObj.id));
     } catch (error) {
