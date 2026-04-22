@@ -155,7 +155,7 @@ const Query = () => {
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const apiKey = process.env.REACT_APP_GROQ_API_KEY || '';
+  const apiKey = localStorage.getItem('groq_key') || process.env.REACT_APP_GROQ_API_KEY || '';
   const [selectedModel, setSelectedModel] = useState(() => {
     const saved = localStorage.getItem('nexabi_model');
     return saved === 'gemini' ? 'gemini' : 'groq';
@@ -556,93 +556,40 @@ IMPORTANT:
 - Think like you are presenting to a CEO`;
       }
 
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [
-            { role: 'system', content: finalSystemPrompt },
-            ...newMessages.slice(1).map(m => ({ role: m.type === 'user' ? 'user' : 'assistant', content: m.rawContent || m.content }))
-          ],
-          max_tokens: 3000,
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`API Error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const aiResponse = data.choices[0]?.message?.content || 'No response generated.';
-      
-      let parsedContent = aiResponse;
-      let chartData = null;
-      let htmlData = null;
-      let chartSuggest = null;
-
-      const chartMatch = aiResponse.match(/\{CHART_DATA:\s*(\{[\s\S]*?\})\s*\}/);
-      if (chartMatch) {
-        try {
-          chartData = JSON.parse(chartMatch[1]);
-          parsedContent = aiResponse.replace(chartMatch[0], '').trim();
-        } catch (e) { console.error("Failed to parse chart JSON", e); }
-      }
-
-      const htmlMatch = aiResponse.match(/\{HTML_OUTPUT:\s*(\{[\s\S]*?\})\s*\}/);
-      if (htmlMatch && !chartData) {
-        try {
-          htmlData = JSON.parse(htmlMatch[1]);
-          parsedContent = aiResponse.replace(htmlMatch[0], '').trim();
-        } catch (e) { console.error("Failed to parse HTML JSON", e); }
-      }
-
-      const suggestMatch = aiResponse.match(/\{CHART_SUGGEST:\s*(\{[\s\S]*?\})\s*\}/);
-      if (suggestMatch && !chartData && !htmlData) {
-        try {
-          chartSuggest = JSON.parse(suggestMatch[1]);
-          parsedContent = aiResponse.replace(suggestMatch[0], '').trim();
-        } catch (e) { console.error("Failed to parse suggest JSON", e); }
-      }
+      const result = await askQuery(customPrompt, apiKey, selectedDataset?.id || null, token, 'groq', conversationHistory);
+      const aiResponse = result?.response || 'No response generated.';
+      const parsed = parseAiResponse(aiResponse);
 
       const aiMsgId = Date.now();
       
-      if(chartData) {
-        setChartConfigs(p => ({...p, [aiMsgId]: { ...defaultConfig, customColors: chartData.colors || THEMES.Ocean }}));
-      }
-
       const aiMsgObj = { 
         id: aiMsgId, 
         type: 'ai', 
-        content: parsedContent,
-        rawContent: aiResponse, 
-        chart: chartData,
-        htmlOutput: htmlData,
-        chartSuggest: chartSuggest,
+        content: parsed.parsedContent,
+        rawContent: aiResponse,
+        chart: parsed.chartData,
+        htmlOutput: parsed.htmlData,
+        chartSuggest: parsed.chartSuggest,
         userPrompt: customPrompt,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
       };
 
-      setMessages(p => [...p, aiMsgObj]);
+      if(parsed.chartData) {
+        setChartConfigs(p => ({...p, [aiMsgId]: { ...defaultConfig, customColors: parsed.chartData.colors || THEMES.Ocean }}));
+      }
 
-      // Save to backend
-      if (token) {
-        try {
-          const saved = await askQuery(customPrompt, apiKey, selectedDataset?.id || null, token, 'groq', conversationHistory);
-          if (saved) {
-            setChatHistory(prev => [saved, ...prev]);
-          }
-        } catch (err) {
-          console.error("Failed to save query history:", err);
-        }
+      setMessages(p => [...p, aiMsgObj]);
+      if (result) {
+        setChatHistory(prev => [result, ...prev]);
       }
 
     } catch (error) {
       console.error(error);
-      setMessages(p => [...p, { id: Date.now(), type: 'ai', content: `Error: Could not fetch response. ${error.message} Check your API key or network.`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+      const status = error?.response?.status;
+      const message = status === 429
+        ? 'Rate limit reached. Please wait a moment and try again.'
+        : `Error: Could not fetch response. ${error.message} Check your API key or network.`;
+      setMessages(p => [...p, { id: Date.now(), type: 'ai', content: message, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
     } finally {
       setIsTyping(false);
     }
