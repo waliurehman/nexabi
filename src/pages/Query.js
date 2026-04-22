@@ -164,6 +164,9 @@ const Query = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeChatId, setActiveChatId] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedChatIds, setSelectedChatIds] = useState([]);
+  const [contextMenu, setContextMenu] = useState(null);
   const endRef = useRef(null);
   
   const [chartConfigs, setChartConfigs] = useState({});
@@ -281,6 +284,13 @@ const Query = () => {
     localStorage.setItem('nexabi_model', selectedModel);
   }, [selectedModel]);
 
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClose = () => setContextMenu(null);
+    window.addEventListener('click', handleClose);
+    return () => window.removeEventListener('click', handleClose);
+  }, [contextMenu]);
+
   const savePreset = (config) => {
     if(!presetName) return;
     const newPresets = [...presets, { name: presetName, config }];
@@ -341,6 +351,21 @@ const Query = () => {
     setActiveChatId(null);
   };
 
+  const handleToggleSelectMode = () => {
+    setIsSelectMode(prev => !prev);
+    setSelectedChatIds([]);
+  };
+
+  const handleToggleSelectChat = (id) => {
+    setSelectedChatIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const handleSelectAll = () => {
+    const allIds = filteredChats.map(c => c.id);
+    const allSelected = allIds.length > 0 && allIds.every(id => selectedChatIds.includes(id));
+    setSelectedChatIds(allSelected ? [] : allIds);
+  };
+
   const handleLoadChat = (chat) => {
     if (!chat) return;
     const parsed = parseAiResponse(chat.response || '');
@@ -384,9 +409,57 @@ const Query = () => {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (!token || selectedChatIds.length === 0) return;
+    const prev = chatHistory;
+    const remaining = prev.filter(c => !selectedChatIds.includes(c.id));
+    setChatHistory(remaining);
+    if (selectedChatIds.includes(activeChatId)) {
+      handleNewChat();
+    }
+    setSelectedChatIds([]);
+    setIsSelectMode(false);
+    try {
+      await Promise.all(selectedChatIds.map(id => deleteQuery(id, token)));
+    } catch (err) {
+      console.error('Failed to delete selected chats:', err);
+      setChatHistory(prev);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!token || chatHistory.length === 0) return;
+    const confirmed = window.confirm('Delete all chats?');
+    if (!confirmed) return;
+    const prev = chatHistory;
+    setChatHistory([]);
+    handleNewChat();
+    try {
+      await Promise.all(prev.map(c => deleteQuery(c.id, token)));
+    } catch (err) {
+      console.error('Failed to clear chats:', err);
+      setChatHistory(prev);
+    }
+  };
+
+  const handleContextMenu = (event, chat) => {
+    event.preventDefault();
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      chat
+    });
+  };
+
+  const handleRenameChat = (chat) => {
+    const nextTitle = window.prompt('Rename chat', chat.title || chat.question || '');
+    if (!nextTitle || !nextTitle.trim()) return;
+    setChatHistory(prev => prev.map(c => c.id === chat.id ? { ...c, title: nextTitle.trim() } : c));
+  };
+
   const filteredChats = chatHistory.filter(c => {
     if (!searchTerm.trim()) return true;
-    const base = `${c.question || ''} ${c.response || ''}`.toLowerCase();
+    const base = `${c.title || ''} ${c.question || ''} ${c.response || ''}`.toLowerCase();
     return base.includes(searchTerm.toLowerCase());
   });
 
@@ -1109,9 +1182,12 @@ IMPORTANT:
               <div style={S.brandDot} />
               <span style={S.brandTitle}>NexaBI</span>
             </div>
-            <button className="sidebar-close" style={S.sidebarToggleBtn} onClick={() => setIsSidebarOpen(false)}>
-              <X size={16} />
-            </button>
+            <div style={S.sidebarHeaderActions}>
+              <button style={S.selectToggleBtn} onClick={handleToggleSelectMode}>{isSelectMode ? 'Cancel' : 'Select'}</button>
+              <button className="sidebar-close" style={S.sidebarToggleBtn} onClick={() => setIsSidebarOpen(false)}>
+                <X size={16} />
+              </button>
+            </div>
           </div>
           <button style={S.newChatBtn} onClick={handleNewChat}>+ New Chat</button>
 
@@ -1121,14 +1197,29 @@ IMPORTANT:
           </div>
 
           <div style={S.chatList}>
+            {isSelectMode && (
+              <div style={S.selectAllRow}>
+                <label style={S.selectAllLabel}>
+                  <input type="checkbox" checked={filteredChats.length > 0 && filteredChats.every(c => selectedChatIds.includes(c.id))} onChange={handleSelectAll} />
+                  <span>Select All</span>
+                </label>
+                <span style={S.selectCount}>{selectedChatIds.length} selected</span>
+              </div>
+            )}
             {filteredChats.length === 0 ? (
               <div style={S.emptyChat}>No chats yet</div>
             ) : (
               filteredChats.map((chat, i) => {
-                const title = (chat.question || chat.response || 'Untitled').slice(0, 35);
+                const title = (chat.title || chat.question || chat.response || 'Untitled').slice(0, 35);
+                const isSelected = selectedChatIds.includes(chat.id);
                 return (
-                  <motion.div key={chat.id} className="chat-item" initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.02 }} style={{...S.chatItem, ...(activeChatId === chat.id ? S.chatItemActive : {})}} onClick={() => handleLoadChat(chat)}>
-                    <div style={S.chatText}>{title}{(chat.question || chat.response || '').length > 35 ? '...' : ''}</div>
+                  <motion.div key={chat.id} className="chat-item" initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.02 }} style={{...S.chatItem, ...(activeChatId === chat.id ? S.chatItemActive : {}), ...(isSelected ? S.chatItemSelected : {})}} onClick={() => isSelectMode ? handleToggleSelectChat(chat.id) : handleLoadChat(chat)} onContextMenu={(e) => handleContextMenu(e, chat)}>
+                    <div style={S.chatRowTop}>
+                      {isSelectMode && (
+                        <input type="checkbox" checked={isSelected} onChange={() => handleToggleSelectChat(chat.id)} onClick={(e) => e.stopPropagation()} />
+                      )}
+                      <div style={S.chatText}>{title}{(chat.title || chat.question || chat.response || '').length > 35 ? '...' : ''}</div>
+                    </div>
                     <div style={S.chatMeta}>
                       <span style={S.chatTime}>{formatTimeAgo(chat.created_at)}</span>
                       <button className="chat-delete" style={S.chatDeleteBtn} onClick={(e) => { e.stopPropagation(); handleDeleteChat(chat.id); }}>
@@ -1140,6 +1231,15 @@ IMPORTANT:
               })
             )}
           </div>
+
+          {isSelectMode && (
+            <div style={S.bulkActions}>
+              <button style={S.bulkDeleteBtn} onClick={handleBulkDelete}>Delete Selected ({selectedChatIds.length})</button>
+              <button style={S.bulkCancelBtn} onClick={handleToggleSelectMode}>Cancel</button>
+            </div>
+          )}
+
+          <button style={S.clearAllBtn} onClick={handleClearAll}>Clear All</button>
 
           <div style={S.sidebarFooter}>
             <div style={S.userRow}>
@@ -1154,6 +1254,18 @@ IMPORTANT:
         </motion.div>
         <div className="chat-area">
           <button className="sidebar-toggle" onClick={() => setIsSidebarOpen(true)}><Menu size={18} /></button>
+          <AnimatePresence>
+            {contextMenu && (
+              <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} style={{...S.contextMenu, top: contextMenu.y, left: contextMenu.x}}>
+                <button style={S.contextItem} onClick={() => { handleDeleteChat(contextMenu.chat.id); setContextMenu(null); }}>
+                  <Trash2 size={14} /> Delete
+                </button>
+                <button style={S.contextItem} onClick={() => { handleRenameChat(contextMenu.chat); setContextMenu(null); }}>
+                  <Edit3 size={14} /> Rename
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <div className="messages-area">
             <AnimatePresence>
               {messages.map(msg => (
@@ -1355,18 +1467,29 @@ const S = {
   brandRow: { display: 'flex', alignItems: 'center', gap: '8px' },
   brandDot: { width: '10px', height: '10px', borderRadius: '50%', background: 'linear-gradient(135deg,#6C63FF,#3B82F6)' },
   brandTitle: { fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.02em' },
+  sidebarHeaderActions: { display: 'flex', alignItems: 'center', gap: '8px' },
   sidebarToggleBtn: { background: 'transparent', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'none' },
+  selectToggleBtn: { border: '1px solid var(--border)', background: 'var(--input-bg)', borderRadius: '8px', padding: '4px 10px', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' },
   newChatBtn: { width: '100%', background: 'linear-gradient(135deg,#6C63FF,#3B82F6)', color: '#fff', border: 'none', borderRadius: '10px', padding: '10px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 6px 16px rgba(108,99,255,0.25)' },
   searchWrap: { display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: '10px', padding: '8px 10px' },
   searchInput: { flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: '12px', color: 'var(--text-primary)' },
   chatList: { display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', paddingRight: '4px', flex: 1 },
+  selectAllRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-tertiary)', padding: '4px 6px' },
+  selectAllLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)' },
+  selectCount: { fontSize: '11px', color: 'var(--text-tertiary)' },
   chatItem: { display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px 12px', borderRadius: '12px', border: '1px solid transparent', cursor: 'pointer', background: 'transparent', transition: 'all 0.2s ease' },
   chatItemActive: { background: 'rgba(108,99,255,0.12)', borderColor: 'rgba(108,99,255,0.35)' },
+  chatItemSelected: { borderColor: 'rgba(108,99,255,0.6)' },
+  chatRowTop: { display: 'flex', alignItems: 'center', gap: '8px' },
   chatText: { fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' },
   chatMeta: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
   chatTime: { fontSize: '11px', color: 'var(--text-tertiary)' },
   chatDeleteBtn: { background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer', opacity: 0, transition: 'opacity 0.2s ease' },
   emptyChat: { fontSize: '12px', color: 'var(--text-tertiary)', padding: '10px 6px' },
+  bulkActions: { display: 'flex', gap: '8px', marginTop: '8px' },
+  bulkDeleteBtn: { flex: 1, background: 'rgba(239,68,68,0.15)', color: 'var(--danger)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: '10px', padding: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' },
+  bulkCancelBtn: { background: 'var(--input-bg)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '10px', padding: '8px 10px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' },
+  clearAllBtn: { marginTop: '6px', background: 'transparent', color: 'var(--danger)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', padding: '8px 10px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' },
   sidebarFooter: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: '12px' },
   userRow: { display: 'flex', alignItems: 'center', gap: '10px' },
   userAvatarSm: { width: '28px', height: '28px', borderRadius: '10px', background: 'linear-gradient(135deg,#6C63FF,#3B82F6)', color: '#fff', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' },
@@ -1374,6 +1497,8 @@ const S = {
   userName: { fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' },
   userEmail: { fontSize: '10px', color: 'var(--text-tertiary)' },
   footerSettingsBtn: { border: '1px solid var(--border)', background: 'var(--input-bg)', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: 'var(--text-secondary)' },
+  contextMenu: { position: 'fixed', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '10px', padding: '6px', zIndex: 30, boxShadow: 'var(--shadow-md)', display: 'flex', flexDirection: 'column', gap: '4px' },
+  contextItem: { display: 'flex', alignItems: 'center', gap: '8px', border: 'none', background: 'transparent', padding: '6px 10px', borderRadius: '8px', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' },
   modelRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' },
   modelGroup: { display: 'flex', gap: '8px', background: 'var(--input-bg)', borderRadius: '10px', padding: '4px', border: '1px solid var(--border)' },
   modelBtn: { padding: '6px 12px', borderRadius: '8px', border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' },
