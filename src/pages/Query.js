@@ -156,6 +156,10 @@ const Query = () => {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const apiKey = process.env.REACT_APP_GROQ_API_KEY || '';
+  const [selectedModel, setSelectedModel] = useState(() => {
+    const saved = localStorage.getItem('nexabi_model');
+    return saved === 'gemini' ? 'gemini' : 'groq';
+  });
   const endRef = useRef(null);
   
   const [chartConfigs, setChartConfigs] = useState({});
@@ -246,6 +250,10 @@ const Query = () => {
     if (saved) setPresets(JSON.parse(saved));
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem('nexabi_model', selectedModel);
+  }, [selectedModel]);
+
   const savePreset = (config) => {
     if(!presetName) return;
     const newPresets = [...presets, { name: presetName, config }];
@@ -269,6 +277,76 @@ const Query = () => {
     setMessages(newMessages);
     setInput('');
     setIsTyping(true);
+
+    const conversationHistory = newMessages.slice(1).map(m => ({
+      role: m.type === 'user' ? 'user' : 'assistant',
+      content: m.rawContent || m.content
+    }));
+
+    if (selectedModel === 'gemini') {
+      try {
+        if (!token) {
+          throw new Error('Not authenticated');
+        }
+        const result = await askQuery(customPrompt, null, selectedDataset?.id || null, token, 'gemini', conversationHistory);
+        const aiResponse = result?.response || 'No response generated.';
+        
+        let parsedContent = aiResponse;
+        let chartData = null;
+        let htmlData = null;
+        let chartSuggest = null;
+
+        const chartMatch = aiResponse.match(/\{CHART_DATA:\s*(\{[\s\S]*?\})\s*\}/);
+        if (chartMatch) {
+          try {
+            chartData = JSON.parse(chartMatch[1]);
+            parsedContent = aiResponse.replace(chartMatch[0], '').trim();
+          } catch (e) { console.error("Failed to parse chart JSON", e); }
+        }
+
+        const htmlMatch = aiResponse.match(/\{HTML_OUTPUT:\s*(\{[\s\S]*?\})\s*\}/);
+        if (htmlMatch && !chartData) {
+          try {
+            htmlData = JSON.parse(htmlMatch[1]);
+            parsedContent = aiResponse.replace(htmlMatch[0], '').trim();
+          } catch (e) { console.error("Failed to parse HTML JSON", e); }
+        }
+
+        const suggestMatch = aiResponse.match(/\{CHART_SUGGEST:\s*(\{[\s\S]*?\})\s*\}/);
+        if (suggestMatch && !chartData && !htmlData) {
+          try {
+            chartSuggest = JSON.parse(suggestMatch[1]);
+            parsedContent = aiResponse.replace(suggestMatch[0], '').trim();
+          } catch (e) { console.error("Failed to parse suggest JSON", e); }
+        }
+
+        const aiMsgId = Date.now();
+        
+        if(chartData) {
+          setChartConfigs(p => ({...p, [aiMsgId]: { ...defaultConfig, customColors: chartData.colors || THEMES.Ocean }}));
+        }
+
+        const aiMsgObj = { 
+          id: aiMsgId, 
+          type: 'ai', 
+          content: parsedContent,
+          rawContent: aiResponse, 
+          chart: chartData,
+          htmlOutput: htmlData,
+          chartSuggest: chartSuggest,
+          userPrompt: customPrompt,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+        };
+
+        setMessages(p => [...p, aiMsgObj]);
+      } catch (error) {
+        console.error(error);
+        setMessages(p => [...p, { id: Date.now(), type: 'ai', content: `Error: Could not fetch response. ${error.message}`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+      } finally {
+        setIsTyping(false);
+      }
+      return;
+    }
 
     if (!apiKey) {
       setTimeout(() => {
@@ -421,7 +499,7 @@ IMPORTANT:
       // Save to backend
       if (token) {
         try {
-          await askQuery(customPrompt, apiKey, selectedDataset?.id || null, token);
+          await askQuery(customPrompt, apiKey, selectedDataset?.id || null, token, 'groq', conversationHistory);
         } catch (err) {
           console.error("Failed to save query history:", err);
         }
@@ -986,6 +1064,13 @@ IMPORTANT:
                 <Send size={18} color="#fff" />
               </motion.button>
             </div>
+            <div style={S.modelRow}>
+              <div style={S.modelGroup}>
+                <button onClick={() => setSelectedModel('groq')} style={{...S.modelBtn, ...(selectedModel === 'groq' ? S.modelBtnActive : {})}}>Groq</button>
+                <button onClick={() => setSelectedModel('gemini')} style={{...S.modelBtn, ...(selectedModel === 'gemini' ? S.modelBtnActive : {})}}>Gemini</button>
+              </div>
+              <span style={S.modelHint}>Model: {selectedModel === 'groq' ? 'Groq' : 'Gemini'}</span>
+            </div>
           </div>
         </div>
         <div className="side-panel">
@@ -1119,6 +1204,11 @@ const S = {
   attachBtn: { width: '40px', height: '40px', borderRadius: '10px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   input: { flex: 1, background: 'transparent', fontSize: '14px', color: 'var(--text-primary)', padding: '8px 0', border: 'none', outline: 'none' },
   sendBtn: { width: '40px', height: '40px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg,#6C63FF,#3B82F6)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(108,99,255,0.25)' },
+  modelRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' },
+  modelGroup: { display: 'flex', gap: '8px', background: 'var(--input-bg)', borderRadius: '10px', padding: '4px', border: '1px solid var(--border)' },
+  modelBtn: { padding: '6px 12px', borderRadius: '8px', border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' },
+  modelBtnActive: { background: 'linear-gradient(135deg,#6C63FF,#3B82F6)', color: '#fff', boxShadow: '0 4px 10px rgba(108,99,255,0.25)' },
+  modelHint: { fontSize: '12px', color: 'var(--text-tertiary)' },
   sourceItem: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '12px', cursor: 'pointer' },
   sourceIcon: { width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(108,99,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   sugBtn: { display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '10px 14px', marginBottom: '6px', borderRadius: '10px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 500, cursor: 'pointer', textAlign: 'left', lineHeight: 1.4 },
