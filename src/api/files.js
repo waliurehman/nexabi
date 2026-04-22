@@ -34,6 +34,13 @@ export const getDatasets = async (token) => {
   return response.data;
 };
 
+export const getDatasetById = async (id, token) => {
+  const response = await axios.get(`${API_URL}/files/datasets/${id}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return response.data;
+};
+
 export const getDocuments = async (token) => {
   const response = await axios.get(`${API_URL}/files/documents`, {
     headers: { Authorization: `Bearer ${token}` }

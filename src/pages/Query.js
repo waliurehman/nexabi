@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { askQuery, getHistory } from '../api/queries';
+import { getDatasets, getDatasetById } from '../api/files';
 import { 
   BarChart, Bar, LineChart, Line, PieChart, Pie, AreaChart, Area, Cell, 
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -29,12 +30,14 @@ const initialMessages = [
   { id: 1, type: 'ai', content: "Hello! I'm NexaBI. I can analyze your data, generate charts, build interactive mini-apps, and create custom UI components. What would you like me to build today?", time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
 ];
 
-const dataSources = [
-  { name: 'sales_2024.csv', type: 'CSV', icon: FileSpreadsheet, size: '2.4 MB' },
-  { name: 'customers_db', type: 'PostgreSQL', icon: Database, size: '142 tables' },
-  { name: 'marketing_data.csv', type: 'CSV', icon: FileSpreadsheet, size: '856 KB' },
-  { name: 'Power BI Workspace', type: 'Power BI', icon: Link2, size: '8 reports' },
-];
+const getFileIcon = (name) => {
+  if (!name) return FileSpreadsheet;
+  const ext = name.split('.').pop().toLowerCase();
+  if (['csv'].includes(ext)) return FileSpreadsheet;
+  if (['xlsx', 'xls'].includes(ext)) return FileSpreadsheet;
+  if (['json'].includes(ext)) return Database;
+  return FileSpreadsheet;
+};
 
 const SYSTEM_PROMPT = `You are NexaBI — a live creative builder AI.
 Your job is to BUILD exactly what the user asks.
@@ -166,6 +169,50 @@ const Query = () => {
   const chartRefs = useRef({});
   const { token } = useAuth();
 
+  // Dataset selection state
+  const [datasets, setDatasets] = useState([]);
+  const [selectedDataset, setSelectedDataset] = useState(null);
+  const [datasetDetail, setDatasetDetail] = useState(null);
+  const [loadingDataset, setLoadingDataset] = useState(false);
+
+  useEffect(() => {
+    const fetchDatasets = async () => {
+      if (!token) return;
+      try {
+        const data = await getDatasets(token);
+        setDatasets(data || []);
+      } catch (err) {
+        console.error('Failed to fetch datasets:', err);
+      }
+    };
+    fetchDatasets();
+  }, [token]);
+
+  const handleSelectDataset = async (dataset) => {
+    if (selectedDataset?.id === dataset.id) {
+      // Deselect
+      setSelectedDataset(null);
+      setDatasetDetail(null);
+      return;
+    }
+    setSelectedDataset(dataset);
+    setLoadingDataset(true);
+    try {
+      const detail = await getDatasetById(dataset.id, token);
+      setDatasetDetail(detail);
+    } catch (err) {
+      console.error('Failed to fetch dataset detail:', err);
+      setDatasetDetail(null);
+    } finally {
+      setLoadingDataset(false);
+    }
+  };
+
+  const clearDatasetSelection = () => {
+    setSelectedDataset(null);
+    setDatasetDetail(null);
+  };
+
   useEffect(() => {
     const fetchHistory = async () => {
       if (!token) return;
@@ -232,6 +279,14 @@ const Query = () => {
     }
 
     try {
+      // Build system prompt with dataset context if selected
+      let finalSystemPrompt = SYSTEM_PROMPT;
+      if (datasetDetail && datasetDetail.preview && datasetDetail.columns) {
+        const colNames = Object.keys(datasetDetail.columns);
+        const sampleRows = (datasetDetail.preview || []).slice(0, 50);
+        finalSystemPrompt = SYSTEM_PROMPT + `\n\nIMPORTANT — REAL DATASET CONTEXT:\nThe user has selected the dataset "${datasetDetail.name}" (${datasetDetail.row_count} rows).\nColumns: ${JSON.stringify(colNames)}\nColumn types: ${JSON.stringify(datasetDetail.columns)}\nSample data (first ${sampleRows.length} rows):\n${JSON.stringify(sampleRows, null, 1)}\n\nYou MUST use THIS ACTUAL DATA for charts and analysis. Do NOT make up fake data. Use the real column names and real values from the sample above.`;
+      }
+
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -241,7 +296,7 @@ const Query = () => {
         body: JSON.stringify({
           model: 'llama-3.3-70b-versatile',
           messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: finalSystemPrompt },
             ...newMessages.slice(1).map(m => ({ role: m.type === 'user' ? 'user' : 'assistant', content: m.rawContent || m.content }))
           ],
           max_tokens: 3000,
@@ -307,7 +362,7 @@ const Query = () => {
       // Save to backend
       if (token) {
         try {
-          await askQuery(customPrompt, apiKey, null, token);
+          await askQuery(customPrompt, apiKey, selectedDataset?.id || null, token);
         } catch (err) {
           console.error("Failed to save query history:", err);
         }
@@ -875,15 +930,68 @@ const Query = () => {
           </div>
         </div>
         <div style={S.panel}>
-          <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>Data Sources</h3>
-          <p style={{ fontSize: '13px', color: 'var(--text-tertiary)', marginTop: '4px', marginBottom: '20px' }}>Connected datasets for AI queries</p>
+          <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>Select Dataset</h3>
+          <p style={{ fontSize: '13px', color: 'var(--text-tertiary)', marginTop: '4px', marginBottom: '16px' }}>Connect your uploaded data to AI</p>
+
+          {/* Dataset selection status */}
+          {selectedDataset ? (
+            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '10px', padding: '10px 14px', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <CheckCircle size={15} color="var(--success)" />
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--success)', flex: 1 }}>✓ {selectedDataset.name} selected</span>
+              <motion.button onClick={clearDatasetSelection} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }} whileHover={{ scale: 1.1 }}>
+                <X size={14} color="var(--text-tertiary)" />
+              </motion.button>
+            </motion.div>
+          ) : (
+            <div style={{ background: 'var(--input-bg)', borderRadius: '10px', padding: '10px 14px', marginBottom: '14px', fontSize: '12px', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Database size={14} /> No dataset selected — AI will use general knowledge
+            </div>
+          )}
+
+          {/* Dataset info card when selected */}
+          <AnimatePresence>
+            {selectedDataset && datasetDetail && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ background: 'var(--input-bg)', borderRadius: '12px', padding: '16px', marginBottom: '16px', border: '1px solid var(--border)', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(108,99,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <FileSpreadsheet size={18} color="var(--primary)" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>{datasetDetail.name}</p>
+                    <p style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{datasetDetail.row_count} rows · {datasetDetail.file_type?.toUpperCase()}</p>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {Object.keys(datasetDetail.columns || {}).map((col, i) => (
+                    <span key={i} style={{ padding: '3px 8px', borderRadius: '6px', background: 'var(--card)', border: '1px solid var(--border)', fontSize: '10px', fontWeight: 500, color: 'var(--text-secondary)' }}>{col}</span>
+                  ))}
+                </div>
+                <motion.button onClick={clearDatasetSelection} style={{ marginTop: '12px', width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid var(--border)', background: 'transparent', fontSize: '12px', fontWeight: 500, color: 'var(--text-tertiary)', cursor: 'pointer' }} whileHover={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}>
+                  Clear selection
+                </motion.button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {loadingDataset && (
+            <div style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: 'var(--text-tertiary)' }}>Loading dataset...</div>
+          )}
+
+          {/* Dataset list */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '28px' }}>
-            {dataSources.map((s, i) => {
-              const I = s.icon; return (
-                <motion.div key={i} style={S.sourceItem} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }} whileHover={{ backgroundColor: 'var(--hover-bg)' }}>
-                  <div style={S.sourceIcon}><I size={18} color="var(--primary)" /></div>
-                  <div style={{ flex: 1 }}><p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{s.name}</p><p style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '1px' }}>{s.size}</p></div>
-                  <CheckCircle size={14} color="var(--success)" />
+            {datasets.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px', fontSize: '13px', color: 'var(--text-tertiary)' }}>No datasets uploaded yet.<br/>Go to Upload page to add data.</div>
+            ) : datasets.map((ds, i) => {
+              const Icon = getFileIcon(ds.name);
+              const isSelected = selectedDataset?.id === ds.id;
+              return (
+                <motion.div key={ds.id} style={{ ...S.sourceItem, background: isSelected ? 'rgba(108,99,255,0.06)' : 'transparent', border: isSelected ? '1px solid rgba(108,99,255,0.2)' : '1px solid transparent', borderRadius: '12px' }} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }} whileHover={{ backgroundColor: isSelected ? 'rgba(108,99,255,0.1)' : 'var(--hover-bg)' }} onClick={() => handleSelectDataset(ds)} >
+                  <div style={S.sourceIcon}><Icon size={18} color={isSelected ? 'var(--primary)' : 'var(--text-secondary)'} /></div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: isSelected ? 'var(--primary)' : 'var(--text-primary)' }}>{ds.name}</p>
+                    <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '1px' }}>{ds.file_size} · {ds.row_count} rows</p>
+                  </div>
+                  {isSelected && <CheckCircle size={14} color="var(--success)" />}
                 </motion.div>
               );
             })}
@@ -891,10 +999,10 @@ const Query = () => {
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
             <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Suggested Builds</h4>
             {[
-              'Make a navy blue matrix table of PSL top scorers',
-              'Build me a candlestick chart of AAPL stock',
-              'Show monthly sales as a waterfall chart',
-              'Create a geographic map of user data'
+              'Show me a bar chart of the top 10 values',
+              'Create a pie chart breakdown by category',
+              'Show monthly trends as a line chart',
+              'Build a heatmap of correlations'
             ].map((q, i) => (
               <motion.button key={i} style={S.sugBtn} whileHover={{ borderColor: 'var(--primary)', color: 'var(--primary)' }} onClick={() => setInput(q)}>
                 <Sparkles size={14} />{q}
