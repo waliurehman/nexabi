@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
-import { askQuery, getHistory } from '../api/queries';
+import { askQuery, getHistory, deleteQuery } from '../api/queries';
 import { getDatasets, getDatasetById } from '../api/files';
 import { 
   BarChart, Bar, LineChart, Line, PieChart, Pie, AreaChart, Area, Cell, 
@@ -10,7 +10,7 @@ import {
   ScatterChart, Scatter, ZAxis, ComposedChart, Treemap, FunnelChart, Funnel, LabelList, Legend,
   RadialBarChart, RadialBar
 } from 'recharts';
-import { Send, Paperclip, User, Database, FileSpreadsheet, Link2, CheckCircle, Sparkles, Copy, ThumbsUp, ThumbsDown, Settings, Download, Plus, LayoutDashboard, ChevronDown, Check, Trash2, X, Maximize2, RefreshCw, Edit3, Code, BarChart2, LineChart as LineChartIcon, PieChart as PieChartIcon, Activity, Radar as RadarIcon } from 'lucide-react';
+import { Send, Paperclip, User, Database, FileSpreadsheet, Link2, CheckCircle, Sparkles, Copy, ThumbsUp, ThumbsDown, Settings, Download, Plus, LayoutDashboard, ChevronDown, Check, Trash2, X, Maximize2, RefreshCw, Edit3, Code, BarChart2, LineChart as LineChartIcon, PieChart as PieChartIcon, Activity, Radar as RadarIcon, Search, Menu } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import html2canvas from 'html2canvas';
 
@@ -160,6 +160,10 @@ const Query = () => {
     const saved = localStorage.getItem('nexabi_model');
     return saved === 'gemini' ? 'gemini' : 'groq';
   });
+  const [chatHistory, setChatHistory] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeChatId, setActiveChatId] = useState(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const endRef = useRef(null);
   
   const [chartConfigs, setChartConfigs] = useState({});
@@ -171,7 +175,7 @@ const Query = () => {
   const [fullscreenData, setFullscreenData] = useState(null);
 
   const chartRefs = useRef({});
-  const { token } = useAuth();
+  const { token, user } = useAuth();
 
   // Dataset selection state
   const [datasets, setDatasets] = useState([]);
@@ -222,16 +226,33 @@ const Query = () => {
       if (!token) return;
       try {
         const history = await getHistory(token);
+        setChatHistory(history || []);
         if (history && history.length > 0) {
-          const loadedMessages = history.map(h => ({
-            id: h.id,
-            type: h.role === 'user' ? 'user' : 'ai',
-            content: h.content,
-            rawContent: h.raw_content || h.content,
-            chart: h.chart_data ? JSON.parse(h.chart_data) : null,
-            htmlOutput: h.html_data ? JSON.parse(h.html_data) : null,
-            time: new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }));
+          const sorted = [...history].reverse();
+          const loadedMessages = [];
+          sorted.forEach(h => {
+            const userMsgId = `${h.id}-user`;
+            const aiMsgId = `${h.id}-ai`;
+            const timeStr = new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            loadedMessages.push({
+              id: userMsgId,
+              type: 'user',
+              content: h.question || '',
+              time: timeStr
+            });
+            const parsed = parseAiResponse(h.response || '');
+            loadedMessages.push({
+              id: aiMsgId,
+              type: 'ai',
+              content: parsed.parsedContent,
+              rawContent: h.response || '',
+              chart: parsed.chartData || h.chart_data || null,
+              htmlOutput: parsed.htmlData,
+              chartSuggest: parsed.chartSuggest,
+              userPrompt: h.question || '',
+              time: timeStr
+            });
+          });
           setMessages([...initialMessages, ...loadedMessages]);
         }
       } catch (error) {
@@ -240,6 +261,12 @@ const Query = () => {
     };
     fetchHistory();
   }, [token]);
+
+  useEffect(() => {
+    if (window.innerWidth <= 1024) {
+      setIsSidebarOpen(false);
+    }
+  }, []);
 
   useEffect(() => { 
     if(!activeChartConfigId && !fullscreenData) endRef.current?.scrollIntoView({ behavior: 'smooth' }); 
@@ -262,6 +289,107 @@ const Query = () => {
     setPresetName('');
   };
 
+  const parseAiResponse = (aiResponse) => {
+    let parsedContent = aiResponse;
+    let chartData = null;
+    let htmlData = null;
+    let chartSuggest = null;
+
+    const chartMatch = aiResponse.match(/\{CHART_DATA:\s*(\{[\s\S]*?\})\s*\}/);
+    if (chartMatch) {
+      try {
+        chartData = JSON.parse(chartMatch[1]);
+        parsedContent = aiResponse.replace(chartMatch[0], '').trim();
+      } catch (e) { console.error("Failed to parse chart JSON", e); }
+    }
+
+    const htmlMatch = aiResponse.match(/\{HTML_OUTPUT:\s*(\{[\s\S]*?\})\s*\}/);
+    if (htmlMatch && !chartData) {
+      try {
+        htmlData = JSON.parse(htmlMatch[1]);
+        parsedContent = aiResponse.replace(htmlMatch[0], '').trim();
+      } catch (e) { console.error("Failed to parse HTML JSON", e); }
+    }
+
+    const suggestMatch = aiResponse.match(/\{CHART_SUGGEST:\s*(\{[\s\S]*?\})\s*\}/);
+    if (suggestMatch && !chartData && !htmlData) {
+      try {
+        chartSuggest = JSON.parse(suggestMatch[1]);
+        parsedContent = aiResponse.replace(suggestMatch[0], '').trim();
+      } catch (e) { console.error("Failed to parse suggest JSON", e); }
+    }
+
+    return { parsedContent, chartData, htmlData, chartSuggest };
+  };
+
+  const formatTimeAgo = (dateStr) => {
+    if (!dateStr) return '';
+    const diffMs = Date.now() - new Date(dateStr).getTime();
+    const minutes = Math.floor(diffMs / 60000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    if (hours < 48) return 'yesterday';
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    return new Date(dateStr).toLocaleDateString();
+  };
+
+  const handleNewChat = () => {
+    setMessages(initialMessages);
+    setActiveChatId(null);
+  };
+
+  const handleLoadChat = (chat) => {
+    if (!chat) return;
+    const parsed = parseAiResponse(chat.response || '');
+    const timeStr = new Date(chat.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const userMsg = {
+      id: `${chat.id}-user`,
+      type: 'user',
+      content: chat.question || '',
+      time: timeStr
+    };
+    const aiMsg = {
+      id: `${chat.id}-ai`,
+      type: 'ai',
+      content: parsed.parsedContent,
+      rawContent: chat.response || '',
+      chart: parsed.chartData || chat.chart_data || null,
+      htmlOutput: parsed.htmlData,
+      chartSuggest: parsed.chartSuggest,
+      userPrompt: chat.question || '',
+      time: timeStr
+    };
+    setMessages([...initialMessages, userMsg, aiMsg]);
+    setActiveChatId(chat.id);
+    if (window.innerWidth <= 1024) {
+      setIsSidebarOpen(false);
+    }
+  };
+
+  const handleDeleteChat = async (id) => {
+    if (!token || !id) return;
+    const prev = chatHistory;
+    setChatHistory(prev.filter(c => c.id !== id));
+    if (activeChatId === id) {
+      handleNewChat();
+    }
+    try {
+      await deleteQuery(id, token);
+    } catch (err) {
+      console.error('Failed to delete chat:', err);
+      setChatHistory(prev);
+    }
+  };
+
+  const filteredChats = chatHistory.filter(c => {
+    if (!searchTerm.trim()) return true;
+    const base = `${c.question || ''} ${c.response || ''}`.toLowerCase();
+    return base.includes(searchTerm.toLowerCase());
+  });
+
   const handleSend = async (customPrompt = input) => {
     if (!customPrompt.trim()) return;
     
@@ -277,6 +405,7 @@ const Query = () => {
     setMessages(newMessages);
     setInput('');
     setIsTyping(true);
+    setActiveChatId(null);
 
     const conversationHistory = newMessages.slice(1).map(m => ({
       role: m.type === 'user' ? 'user' : 'assistant',
@@ -339,6 +468,9 @@ const Query = () => {
         };
 
         setMessages(p => [...p, aiMsgObj]);
+        if (result) {
+          setChatHistory(prev => [result, ...prev]);
+        }
       } catch (error) {
         console.error(error);
         setMessages(p => [...p, { id: Date.now(), type: 'ai', content: `Error: Could not fetch response. ${error.message}`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
@@ -499,7 +631,10 @@ IMPORTANT:
       // Save to backend
       if (token) {
         try {
-          await askQuery(customPrompt, apiKey, selectedDataset?.id || null, token, 'groq', conversationHistory);
+          const saved = await askQuery(customPrompt, apiKey, selectedDataset?.id || null, token, 'groq', conversationHistory);
+          if (saved) {
+            setChatHistory(prev => [saved, ...prev]);
+          }
         } catch (err) {
           console.error("Failed to save query history:", err);
         }
@@ -990,6 +1125,12 @@ IMPORTANT:
 
   return (
     <motion.div style={S.page} variants={pageV} initial="initial" animate="animate" exit="exit">
+
+      <AnimatePresence>
+        {isSidebarOpen && window.innerWidth <= 1024 && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSidebarOpen(false)} style={S.sidebarOverlay} />
+        )}
+      </AnimatePresence>
       
       <AnimatePresence>
         {fullscreenData && (
@@ -1015,7 +1156,57 @@ IMPORTANT:
       </AnimatePresence>
 
       <div className="query-container">
+        <motion.div className={`chat-sidebar ${isSidebarOpen ? 'open' : ''}`} initial={{ x: -10, opacity: 0 }} animate={{ x: 0, opacity: 1 }}>
+          <div style={S.sidebarHeader}>
+            <div style={S.brandRow}>
+              <div style={S.brandDot} />
+              <span style={S.brandTitle}>NexaBI</span>
+            </div>
+            <button className="sidebar-close" style={S.sidebarToggleBtn} onClick={() => setIsSidebarOpen(false)}>
+              <X size={16} />
+            </button>
+          </div>
+          <button style={S.newChatBtn} onClick={handleNewChat}>+ New Chat</button>
+
+          <div style={S.searchWrap}>
+            <Search size={16} color="var(--text-tertiary)" />
+            <input type="text" placeholder="Search chats..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={S.searchInput} />
+          </div>
+
+          <div style={S.chatList}>
+            {filteredChats.length === 0 ? (
+              <div style={S.emptyChat}>No chats yet</div>
+            ) : (
+              filteredChats.map((chat, i) => {
+                const title = (chat.question || chat.response || 'Untitled').slice(0, 35);
+                return (
+                  <motion.div key={chat.id} className="chat-item" initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.02 }} style={{...S.chatItem, ...(activeChatId === chat.id ? S.chatItemActive : {})}} onClick={() => handleLoadChat(chat)}>
+                    <div style={S.chatText}>{title}{(chat.question || chat.response || '').length > 35 ? '...' : ''}</div>
+                    <div style={S.chatMeta}>
+                      <span style={S.chatTime}>{formatTimeAgo(chat.created_at)}</span>
+                      <button className="chat-delete" style={S.chatDeleteBtn} onClick={(e) => { e.stopPropagation(); handleDeleteChat(chat.id); }}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </motion.div>
+                );
+              })
+            )}
+          </div>
+
+          <div style={S.sidebarFooter}>
+            <div style={S.userRow}>
+              <div style={S.userAvatarSm}>{(user?.name || 'U').slice(0, 1).toUpperCase()}</div>
+              <div style={S.userMeta}>
+                <span style={S.userName}>{user?.name || 'User'}</span>
+                <span style={S.userEmail}>{user?.email || ''}</span>
+              </div>
+            </div>
+            <button style={S.footerSettingsBtn} title="Settings"><Settings size={16} /></button>
+          </div>
+        </motion.div>
         <div className="chat-area">
+          <button className="sidebar-toggle" onClick={() => setIsSidebarOpen(true)}><Menu size={18} /></button>
           <div className="messages-area">
             <AnimatePresence>
               {messages.map(msg => (
@@ -1156,18 +1347,26 @@ IMPORTANT:
         </div>
       </div>
       <style>{`
+        .chat-sidebar { width: 260px; background: var(--card); border-right: 1px solid var(--border); padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; }
+        .chat-sidebar .chat-item:hover { background: var(--hover-bg); border-color: var(--border); }
+        .chat-sidebar .chat-item:hover .chat-delete { opacity: 1; }
+        .chat-area { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); overflow: hidden; position: relative; }
+        .sidebar-toggle { display: none; position: absolute; top: 12px; left: 12px; z-index: 5; width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text-secondary); cursor: pointer; box-shadow: var(--shadow-sm); }
         @keyframes typing {
           0%, 100% { opacity: 0.3; transform: scale(0.8); }
           50% { opacity: 1; transform: scale(1); }
         }
         .query-container { display: flex; height: 100%; }
-        .chat-area { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); overflow: hidden; }
         .side-panel { width: 300px; padding: 24px; background: var(--card); overflow-y: auto; flex-shrink: 0; }
         .messages-area { flex: 1; padding: 24px 28px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
         .input-area { padding: 16px 24px 20px; border-top: 1px solid var(--border); background: var(--card); }
         
         @media (max-width: 1024px) {
           .query-container { flex-direction: column; }
+          .chat-sidebar { position: fixed; top: 0; left: 0; bottom: 0; z-index: 15; transform: translateX(-100%); transition: transform 0.2s ease; box-shadow: 0 12px 36px rgba(0,0,0,0.2); }
+          .chat-sidebar.open { transform: translateX(0); }
+          .sidebar-toggle { display: inline-flex; align-items: center; justify-content: center; }
+          .chat-sidebar .sidebar-close { display: inline-flex; }
           .side-panel { width: 100%; border-left: none; border-top: 1px solid var(--border); height: auto; max-height: 40vh; }
           .chat-area { border-right: none; }
         }
@@ -1204,6 +1403,30 @@ const S = {
   attachBtn: { width: '40px', height: '40px', borderRadius: '10px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   input: { flex: 1, background: 'transparent', fontSize: '14px', color: 'var(--text-primary)', padding: '8px 0', border: 'none', outline: 'none' },
   sendBtn: { width: '40px', height: '40px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg,#6C63FF,#3B82F6)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(108,99,255,0.25)' },
+  sidebarOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.35)', zIndex: 10 },
+  sidebarHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  brandRow: { display: 'flex', alignItems: 'center', gap: '8px' },
+  brandDot: { width: '10px', height: '10px', borderRadius: '50%', background: 'linear-gradient(135deg,#6C63FF,#3B82F6)' },
+  brandTitle: { fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.02em' },
+  sidebarToggleBtn: { background: 'transparent', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'none' },
+  newChatBtn: { width: '100%', background: 'linear-gradient(135deg,#6C63FF,#3B82F6)', color: '#fff', border: 'none', borderRadius: '10px', padding: '10px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 6px 16px rgba(108,99,255,0.25)' },
+  searchWrap: { display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: '10px', padding: '8px 10px' },
+  searchInput: { flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: '12px', color: 'var(--text-primary)' },
+  chatList: { display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', paddingRight: '4px', flex: 1 },
+  chatItem: { display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px 12px', borderRadius: '12px', border: '1px solid transparent', cursor: 'pointer', background: 'transparent', transition: 'all 0.2s ease' },
+  chatItemActive: { background: 'rgba(108,99,255,0.12)', borderColor: 'rgba(108,99,255,0.35)' },
+  chatText: { fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' },
+  chatMeta: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  chatTime: { fontSize: '11px', color: 'var(--text-tertiary)' },
+  chatDeleteBtn: { background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer', opacity: 0, transition: 'opacity 0.2s ease' },
+  emptyChat: { fontSize: '12px', color: 'var(--text-tertiary)', padding: '10px 6px' },
+  sidebarFooter: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: '12px' },
+  userRow: { display: 'flex', alignItems: 'center', gap: '10px' },
+  userAvatarSm: { width: '28px', height: '28px', borderRadius: '10px', background: 'linear-gradient(135deg,#6C63FF,#3B82F6)', color: '#fff', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  userMeta: { display: 'flex', flexDirection: 'column' },
+  userName: { fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' },
+  userEmail: { fontSize: '10px', color: 'var(--text-tertiary)' },
+  footerSettingsBtn: { border: '1px solid var(--border)', background: 'var(--input-bg)', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: 'var(--text-secondary)' },
   modelRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' },
   modelGroup: { display: 'flex', gap: '8px', background: 'var(--input-bg)', borderRadius: '10px', padding: '4px', border: '1px solid var(--border)' },
   modelBtn: { padding: '6px 12px', borderRadius: '8px', border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' },
