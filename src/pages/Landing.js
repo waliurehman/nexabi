@@ -111,6 +111,7 @@ const Landing = () => {
   const navigate = useNavigate();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const [hoveredPlan, setHoveredPlan] = React.useState(null);
 
   return (
     <div style={styles.page}>
@@ -355,37 +356,41 @@ const Landing = () => {
           </p>
         </motion.div>
         <div className="pricing-grid">
-          {plans.map((plan, i) => (
+          {plans.map((plan, i) => {
+            const isHighlighted = hoveredPlan ? hoveredPlan === plan.name : plan.highlighted;
+            return (
             <motion.div
               key={plan.name}
               style={{
                 ...styles.pricingCard,
-                ...(plan.highlighted ? styles.pricingCardHighlighted : {}),
+                ...(isHighlighted ? styles.pricingCardHighlighted : {}),
               }}
               {...stagger}
               transition={{ delay: i * 0.1, duration: 0.5 }}
               whileHover={{ y: -4 }}
+              onHoverStart={() => setHoveredPlan(plan.name)}
+              onHoverEnd={() => setHoveredPlan(null)}
             >
-              {plan.highlighted && <div style={styles.popularBadge}>Most Popular</div>}
-              <h3 style={{ ...styles.planName, color: plan.highlighted ? '#fff' : 'var(--text-primary)' }}>
+              {isHighlighted && <div style={styles.popularBadge}>Most Popular</div>}
+              <h3 style={{ ...styles.planName, color: isHighlighted ? '#fff' : '#1E1E2E' }}>
                 {plan.name}
               </h3>
               <div style={styles.priceRow}>
-                <span style={{ ...styles.planPrice, color: plan.highlighted ? '#fff' : 'var(--text-primary)' }}>
+                <span style={{ ...styles.planPrice, color: isHighlighted ? '#fff' : '#1E1E2E' }}>
                   {plan.price}
                 </span>
-                <span style={{ ...styles.planPeriod, color: plan.highlighted ? 'rgba(255,255,255,0.6)' : 'var(--text-tertiary)' }}>
+                <span style={{ ...styles.planPeriod, color: isHighlighted ? 'rgba(255,255,255,0.6)' : '#6B7280' }}>
                   {plan.period}
                 </span>
               </div>
-              <p style={{ ...styles.planDesc, color: plan.highlighted ? 'rgba(255,255,255,0.7)' : 'var(--text-tertiary)' }}>
+              <p style={{ ...styles.planDesc, color: isHighlighted ? 'rgba(255,255,255,0.7)' : '#6B7280' }}>
                 {plan.desc}
               </p>
               <div style={styles.planFeatures}>
                 {plan.features.map((f) => (
                   <div key={f} style={styles.planFeature}>
-                    <CheckCircle size={16} color={plan.highlighted ? '#4ade80' : '#10B981'} />
-                    <span style={{ color: plan.highlighted ? 'rgba(255,255,255,0.9)' : 'var(--text-secondary)' }}>
+                    <CheckCircle size={16} color={isHighlighted ? '#4ade80' : '#10B981'} />
+                    <span style={{ color: isHighlighted ? 'rgba(255,255,255,0.9)' : '#4B5563' }}>
                       {f}
                     </span>
                   </div>
@@ -394,7 +399,7 @@ const Landing = () => {
               <motion.button
                 style={{
                   ...styles.planBtn,
-                  ...(plan.highlighted ? styles.planBtnHighlighted : {}),
+                  ...(isHighlighted ? styles.planBtnHighlighted : {}),
                 }}
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
@@ -403,7 +408,7 @@ const Landing = () => {
                 {plan.cta}
               </motion.button>
             </motion.div>
-          ))}
+          )})}
         </div>
       </section>
 
