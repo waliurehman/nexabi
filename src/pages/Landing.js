@@ -126,6 +126,7 @@ const Landing = () => {
         .steps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; max-width: 1000px; margin: 0 auto; }
         .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; max-width: 1000px; margin: 0 auto; align-items: start; }
         .footer-inner { display: flex; justify-content: space-between; gap: 60px; max-width: 1100px; margin: 0 auto; margin-bottom: 40px; }
+        .footer-links { display: flex; gap: 60px; }
         
         @media (max-width: 1024px) {
           .features-grid { grid-template-columns: repeat(2, 1fr); }
