@@ -1,17 +1,42 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Search, Bell, Sun, Moon, Menu, ChevronDown } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Search, Bell, Sun, Moon, Menu, ChevronDown, User, Settings, Key, LogOut } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const Topbar = ({ onToggleSidebar }) => {
   const { darkMode, toggleDarkMode } = useTheme();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const profileRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (profileRef.current && !profileRef.current.contains(event.target)) {
+        setShowProfile(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const notifications = [
     { id: 1, text: 'Dataset "Sales Q4" processed successfully', time: '2 min ago', type: 'success' },
     { id: 2, text: 'New AI model update available', time: '1 hour ago', type: 'info' },
     { id: 3, text: 'API usage at 80% of limit', time: '3 hours ago', type: 'warning' },
   ];
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  const userName = user?.name || 'User';
+  const userEmail = user?.email || 'user@example.com';
+  const userInitial = userName.charAt(0).toUpperCase();
 
   return (
     <div style={styles.topbar}>
@@ -52,43 +77,95 @@ const Topbar = ({ onToggleSidebar }) => {
             <span style={styles.notifDot} />
           </motion.button>
 
-          {showNotifications && (
-            <motion.div
-              style={styles.notifDropdown}
-              initial={{ opacity: 0, y: -10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.15 }}
-            >
-              <div style={styles.notifHeader}>
-                <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>Notifications</span>
-                <span style={{ fontSize: '12px', color: 'var(--primary)', cursor: 'pointer', fontWeight: 500 }}>Mark all read</span>
-              </div>
-              {notifications.map((n) => (
-                <div key={n.id} style={styles.notifItem}>
-                  <div style={{
-                    width: '8px', height: '8px', borderRadius: '50%', marginTop: '6px', flexShrink: 0,
-                    background: n.type === 'success' ? 'var(--success)' : n.type === 'warning' ? 'var(--warning)' : 'var(--secondary)',
-                  }} />
-                  <div>
-                    <p style={{ fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.4 }}>{n.text}</p>
-                    <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{n.time}</p>
-                  </div>
+          <AnimatePresence>
+            {showNotifications && (
+              <motion.div
+                style={styles.notifDropdown}
+                initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+              >
+                <div style={styles.notifHeader}>
+                  <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>Notifications</span>
+                  <span style={{ fontSize: '12px', color: 'var(--primary)', cursor: 'pointer', fontWeight: 500 }}>Mark all read</span>
                 </div>
-              ))}
-            </motion.div>
-          )}
+                {notifications.map((n) => (
+                  <div key={n.id} style={styles.notifItem}>
+                    <div style={{
+                      width: '8px', height: '8px', borderRadius: '50%', marginTop: '6px', flexShrink: 0,
+                      background: n.type === 'success' ? 'var(--success)' : n.type === 'warning' ? 'var(--warning)' : 'var(--secondary)',
+                    }} />
+                    <div>
+                      <p style={{ fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.4 }}>{n.text}</p>
+                      <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{n.time}</p>
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         <div style={styles.divider} />
 
-        <motion.div style={styles.userArea} whileHover={{ backgroundColor: 'var(--hover-bg)' }}>
-          <div style={styles.avatar}><span style={styles.avatarText}>WU</span></div>
-          <div style={styles.userInfo}>
-            <span style={styles.userName}>WUR</span>
-            <span style={styles.userPlan}>Pro Plan</span>
-          </div>
-          <ChevronDown size={16} color="var(--text-tertiary)" />
-        </motion.div>
+        <div style={{ position: 'relative' }} ref={profileRef}>
+          <motion.div 
+            style={styles.userArea} 
+            whileHover={{ backgroundColor: 'var(--hover-bg)' }}
+            onClick={() => setShowProfile(!showProfile)}
+          >
+            <div style={styles.avatar}><span style={styles.avatarText}>{userInitial}</span></div>
+            <div style={styles.userInfo}>
+              <span style={styles.userName}>{userName}</span>
+              <span style={styles.userPlan}>Free Plan</span>
+            </div>
+            <ChevronDown size={16} color="var(--text-tertiary)" />
+          </motion.div>
+
+          <AnimatePresence>
+            {showProfile && (
+              <motion.div
+                style={styles.profileDropdown}
+                initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+              >
+                <div style={styles.profileHeader}>
+                  <div style={{...styles.avatar, width: '48px', height: '48px', borderRadius: '14px', marginBottom: '12px'}}>
+                    <span style={{...styles.avatarText, fontSize: '18px'}}>{userInitial}</span>
+                  </div>
+                  <h4 style={{fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px'}}>{userName}</h4>
+                  <p style={{fontSize: '13px', color: 'var(--text-tertiary)', marginBottom: '8px'}}>{userEmail}</p>
+                  <span style={{padding: '4px 10px', background: 'rgba(108,99,255,0.1)', color: 'var(--primary)', borderRadius: '6px', fontSize: '11px', fontWeight: 600}}>Free Plan</span>
+                </div>
+                
+                <div style={styles.dropdownDivider} />
+                
+                <div style={styles.menuList}>
+                  <button style={styles.menuItem} onClick={() => { setShowProfile(false); navigate('/settings'); }}>
+                    <User size={16} color="var(--text-secondary)" /> Profile
+                  </button>
+                  <button style={styles.menuItem} onClick={() => { setShowProfile(false); navigate('/settings'); }}>
+                    <Settings size={16} color="var(--text-secondary)" /> Settings
+                  </button>
+                  <button style={styles.menuItem} onClick={() => { setShowProfile(false); navigate('/settings'); }}>
+                    <Key size={16} color="var(--text-secondary)" /> API Keys
+                  </button>
+                </div>
+                
+                <div style={styles.dropdownDivider} />
+                
+                <div style={{padding: '8px'}}>
+                  <button style={styles.logoutBtn} onClick={handleLogout}>
+                    <LogOut size={16} /> Logout
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );
@@ -155,6 +232,40 @@ const styles = {
   userInfo: { display: 'flex', flexDirection: 'column' },
   userName: { fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 },
   userPlan: { fontSize: '11px', color: 'var(--primary)', fontWeight: 500 },
+  profileDropdown: {
+    position: 'absolute', top: '56px', right: 0, width: '240px',
+    background: 'var(--card)', borderRadius: '16px',
+    boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)', overflow: 'hidden', zIndex: 200,
+  },
+  profileHeader: {
+    display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 16px 16px',
+  },
+  dropdownDivider: {
+    height: '1px', background: 'var(--border)', width: '100%',
+  },
+  menuList: {
+    padding: '8px', display: 'flex', flexDirection: 'column', gap: '2px',
+  },
+  menuItem: {
+    display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px',
+    width: '100%', border: 'none', background: 'transparent',
+    fontSize: '14px', color: 'var(--text-primary)', fontWeight: 500,
+    borderRadius: '8px', cursor: 'pointer', textAlign: 'left', transition: 'background 0.2s',
+  },
+  logoutBtn: {
+    display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px',
+    width: '100%', border: 'none', background: 'rgba(239, 68, 68, 0.08)',
+    fontSize: '14px', color: '#EF4444', fontWeight: 600,
+    borderRadius: '8px', cursor: 'pointer', textAlign: 'left', transition: 'background 0.2s',
+  }
 };
+
+const styleSheet = document.createElement("style");
+styleSheet.type = "text/css";
+styleSheet.innerText = `
+  button[style*="menuItem"]:hover { background: var(--hover-bg); }
+  button[style*="logoutBtn"]:hover { background: rgba(239, 68, 68, 0.15); }
+`;
+document.head.appendChild(styleSheet);
 
 export default Topbar;

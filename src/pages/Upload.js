@@ -1,6 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload as UploadIcon, FileSpreadsheet, File, FileText, Database, Plus, CheckCircle, Cloud, HardDrive, Trash2, RefreshCw } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { uploadDataset, getDatasets, deleteDataset } from '../api/files';
 
 const pageV = { initial:{opacity:0,y:16}, animate:{opacity:1,y:0,transition:{duration:0.4}}, exit:{opacity:0,y:-10} };
 const cardV = { initial:{opacity:0,y:20}, animate:(i)=>({opacity:1,y:0,transition:{delay:i*0.1,duration:0.4}}) };
@@ -9,27 +11,92 @@ const formats = [
   {name:'CSV',icon:FileSpreadsheet,color:'#10B981'},{name:'Excel',icon:FileSpreadsheet,color:'#3B82F6'},
   {name:'PDF',icon:FileText,color:'#EF4444'},{name:'Word',icon:File,color:'#6C63FF'},{name:'JSON',icon:File,color:'#F59E0B'},
 ];
-const initFiles = [
-  {name:'sales_report_2024.csv',size:'2.4 MB',progress:100,status:'complete'},
-  {name:'customer_data.xlsx',size:'5.1 MB',progress:100,status:'complete'},
-  {name:'marketing_metrics.csv',size:'856 KB',progress:72,status:'uploading'},
-];
+
 const databases = [
   {name:'PostgreSQL',host:'db.production.nexabi.io',status:'connected',color:'#3B82F6',tables:142,icon:Database},
   {name:'MongoDB',host:'mongo.cluster.nexabi.io',status:'disconnected',color:'#10B981',tables:28,icon:HardDrive},
 ];
 
 const UploadPage = () => {
-  const [isDragging,setDrag] = useState(false);
-  const [files,setFiles] = useState(initFiles);
-  const handleDragOver = useCallback(e=>{e.preventDefault();setDrag(true);},[]);
-  const handleDragLeave = useCallback(()=>setDrag(false),[]);
-  const handleDrop = useCallback(e=>{
-    e.preventDefault();setDrag(false);
-    const nf={name:'dropped_file.csv',size:'1.2 MB',progress:0,status:'uploading'};
-    setFiles(p=>[...p,nf]);
-    let prog=0;const iv=setInterval(()=>{prog+=Math.random()*15;if(prog>=100){prog=100;clearInterval(iv);setFiles(p=>p.map(f=>f.name==='dropped_file.csv'?{...f,progress:100,status:'complete'}:f));}else{setFiles(p=>p.map(f=>f.name==='dropped_file.csv'?{...f,progress:Math.round(prog)}:f));}},300);
-  },[]);
+  const [isDragging, setDrag] = useState(false);
+  const [files, setFiles] = useState([]);
+  const { token } = useAuth();
+  const fileInputRef = useRef(null);
+
+  const fetchFiles = async () => {
+    try {
+      const data = await getDatasets(token);
+      const formatted = data.map(d => ({
+        id: d.id,
+        name: d.filename,
+        size: (d.size / 1024 / 1024).toFixed(2) + ' MB',
+        progress: 100,
+        status: 'complete'
+      }));
+      setFiles(formatted);
+    } catch (error) {
+      console.error("Error fetching datasets:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      fetchFiles();
+    }
+  }, [token]);
+
+  const handleDragOver = useCallback(e => { e.preventDefault(); setDrag(true); }, []);
+  const handleDragLeave = useCallback(() => setDrag(false), []);
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    const tempId = Date.now();
+    
+    setFiles(prev => [...prev, {
+      id: tempId,
+      name: file.name,
+      size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
+      progress: 0,
+      status: 'uploading'
+    }]);
+
+    try {
+      await uploadDataset(file, token, (progressEvent) => {
+        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        setFiles(prev => prev.map(f => f.id === tempId ? { ...f, progress: percentCompleted } : f));
+      });
+      fetchFiles(); // Refresh list to get actual ID from backend
+    } catch (error) {
+      console.error("Upload failed", error);
+      setFiles(prev => prev.map(f => f.id === tempId ? { ...f, status: 'error' } : f));
+    }
+  };
+
+  const handleDrop = useCallback(e => {
+    e.preventDefault(); 
+    setDrag(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  }, [token]);
+
+  const handleSelectFile = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleFile(e.target.files[0]);
+    }
+  };
+
+  const handleDelete = async (fileObj) => {
+    if (fileObj.status === 'uploading') return;
+    try {
+      if (fileObj.id && fileObj.status === 'complete') {
+        await deleteDataset(fileObj.id, token);
+      }
+      setFiles(prev => prev.filter(f => f.id !== fileObj.id));
+    } catch (error) {
+      console.error("Failed to delete", error);
+    }
+  };
 
   return (
     <motion.div style={S.page} variants={pageV} initial="initial" animate="animate" exit="exit">
@@ -43,7 +110,8 @@ const UploadPage = () => {
         </motion.div>
         <h3 style={{fontSize:'18px',fontWeight:700,color:'var(--text-primary)',marginBottom:'6px'}}>{isDragging?'Drop your files here':'Drop CSV or Excel files here'}</h3>
         <p style={{fontSize:'14px',color:'var(--text-tertiary)',marginBottom:'20px'}}>or click to browse from your computer</p>
-        <motion.button style={S.browseBtn} whileHover={{scale:1.03}} whileTap={{scale:0.97}}><UploadIcon size={16}/>Browse Files</motion.button>
+        <input type="file" ref={fileInputRef} onChange={handleSelectFile} style={{ display: 'none' }} accept=".csv,.xlsx,.xls,.pdf,.doc,.docx,.json" />
+        <motion.button onClick={() => fileInputRef.current.click()} style={S.browseBtn} whileHover={{scale:1.03}} whileTap={{scale:0.97}}><UploadIcon size={16}/>Browse Files</motion.button>
         <div style={{display:'flex',gap:'12px',flexWrap:'wrap',justifyContent:'center',marginTop:'24px'}}>
           {formats.map(f=>{const I=f.icon;return(
             <div key={f.name} style={S.formatBadge}><I size={14} color={f.color}/><span>{f.name}</span></div>
@@ -56,16 +124,18 @@ const UploadPage = () => {
         <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
           <AnimatePresence>
             {files.map((f,i)=>(
-              <motion.div key={f.name} style={S.fileItem} initial={{opacity:0,x:-20}} animate={{opacity:1,x:0}} exit={{opacity:0,x:20}} transition={{delay:i*0.05}} whileHover={{backgroundColor:'var(--hover-bg)'}}>
-                <div style={S.fileIcon}><FileSpreadsheet size={20} color="var(--primary)"/></div>
+              <motion.div key={f.id} style={S.fileItem} initial={{opacity:0,x:-20}} animate={{opacity:1,x:0}} exit={{opacity:0,x:20}} transition={{delay:i*0.05}} whileHover={{backgroundColor:'var(--hover-bg)'}}>
+                <div style={S.fileIcon}><FileSpreadsheet size={20} color={f.status==='error'?'var(--danger)':'var(--primary)'}/></div>
                 <div style={{flex:1}}>
-                  <p style={{fontSize:'14px',fontWeight:600,color:'var(--text-primary)'}}>{f.name}</p>
+                  <p style={{fontSize:'14px',fontWeight:600,color:f.status==='error'?'var(--danger)':'var(--text-primary)'}}>{f.name}</p>
                   <p style={{fontSize:'12px',color:'var(--text-tertiary)',marginTop:'2px'}}>{f.size}</p>
                   {f.status==='uploading'&&<div style={S.progressBar}><motion.div style={S.progressFill} initial={{width:0}} animate={{width:`${f.progress}%`}}/></div>}
+                  {f.status==='error'&&<p style={{fontSize:'12px',color:'var(--danger)',marginTop:'2px'}}>Upload failed</p>}
                 </div>
                 <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-                  {f.status==='complete'?<CheckCircle size={18} color="var(--success)"/>:<span style={{fontSize:'12px',fontWeight:600,color:'var(--primary)'}}>{f.progress}%</span>}
-                  <motion.button style={S.rmBtn} onClick={()=>setFiles(files.filter(x=>x.name!==f.name))} whileHover={{backgroundColor:'rgba(239,68,68,0.1)'}}><Trash2 size={15} color="var(--text-tertiary)"/></motion.button>
+                  {f.status==='complete'?<CheckCircle size={18} color="var(--success)"/>:
+                   f.status==='uploading'?<span style={{fontSize:'12px',fontWeight:600,color:'var(--primary)'}}>{f.progress}%</span>:null}
+                  <motion.button style={S.rmBtn} onClick={()=>handleDelete(f)} whileHover={{backgroundColor:'rgba(239,68,68,0.1)'}}><Trash2 size={15} color="var(--text-tertiary)"/></motion.button>
                 </div>
               </motion.div>
             ))}
