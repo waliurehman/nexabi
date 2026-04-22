@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload as UploadIcon, FileSpreadsheet, File, FileText, Database, Plus, CheckCircle, Cloud, HardDrive, Trash2, RefreshCw } from 'lucide-react';
+import { Upload as UploadIcon, FileSpreadsheet, File, FileText, Database, Plus, CheckCircle, Cloud, HardDrive, Trash2, RefreshCw, Table, Braces } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { uploadDataset, getDatasets, deleteDataset } from '../api/files';
 
@@ -8,14 +8,35 @@ const pageV = { initial:{opacity:0,y:16}, animate:{opacity:1,y:0,transition:{dur
 const cardV = { initial:{opacity:0,y:20}, animate:(i)=>({opacity:1,y:0,transition:{delay:i*0.1,duration:0.4}}) };
 
 const formats = [
-  {name:'CSV',icon:FileSpreadsheet,color:'#10B981'},{name:'Excel',icon:FileSpreadsheet,color:'#3B82F6'},
-  {name:'PDF',icon:FileText,color:'#EF4444'},{name:'Word',icon:File,color:'#6C63FF'},{name:'JSON',icon:File,color:'#F59E0B'},
+  {name:'CSV',icon:FileSpreadsheet,color:'#10B981'},{name:'Excel',icon:Table,color:'#3B82F6'},
+  {name:'PDF',icon:FileText,color:'#EF4444'},{name:'Word',icon:FileText,color:'#6C63FF'},{name:'JSON',icon:Braces,color:'#F59E0B'},
 ];
 
 const databases = [
   {name:'PostgreSQL',host:'db.production.nexabi.io',status:'connected',color:'#3B82F6',tables:142,icon:Database},
   {name:'MongoDB',host:'mongo.cluster.nexabi.io',status:'disconnected',color:'#10B981',tables:28,icon:HardDrive},
 ];
+
+const formatSize = (bytes) => {
+  if (bytes === undefined || bytes === null || bytes === '') return '0 KB';
+  const num = Number(bytes);
+  if (isNaN(num)) return bytes; // If backend already formatted it as string
+  if (num === 0) return '0 KB';
+  if (num < 1024) return num + ' B';
+  if (num < 1024 * 1024) return (num / 1024).toFixed(1) + ' KB';
+  return (num / (1024 * 1024)).toFixed(2) + ' MB';
+};
+
+const getFileIcon = (name) => {
+  if (!name) return { icon: FileSpreadsheet, color: 'var(--primary)' };
+  const ext = name.split('.').pop().toLowerCase();
+  if (['csv'].includes(ext)) return { icon: FileSpreadsheet, color: '#10B981' }; // green
+  if (['xlsx', 'xls'].includes(ext)) return { icon: Table, color: '#3B82F6' }; // blue
+  if (['pdf'].includes(ext)) return { icon: FileText, color: '#EF4444' }; // red
+  if (['doc', 'docx'].includes(ext)) return { icon: FileText, color: '#6C63FF' }; // purple
+  if (['json'].includes(ext)) return { icon: Braces, color: '#F59E0B' }; // orange
+  return { icon: File, color: '#F59E0B' }; // default orange for json, etc
+};
 
 const UploadPage = () => {
   const [isDragging, setDrag] = useState(false);
@@ -28,8 +49,9 @@ const UploadPage = () => {
       const data = await getDatasets(token);
       const formatted = data.map(d => ({
         id: d.id,
-        name: d.filename,
-        size: (d.size / 1024 / 1024).toFixed(2) + ' MB',
+        name: d.name || d.filename || 'Unknown File',
+        size: d.file_size || formatSize(d.size),
+        date: d.created_at ? new Date(d.created_at).toLocaleDateString() : new Date().toLocaleDateString(),
         progress: 100,
         status: 'complete'
       }));
@@ -55,7 +77,8 @@ const UploadPage = () => {
     setFiles(prev => [...prev, {
       id: tempId,
       name: file.name,
-      size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
+      size: formatSize(file.size),
+      date: new Date().toLocaleDateString(),
       progress: 0,
       status: 'uploading'
     }]);
@@ -65,7 +88,7 @@ const UploadPage = () => {
         const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
         setFiles(prev => prev.map(f => f.id === tempId ? { ...f, progress: percentCompleted } : f));
       });
-      fetchFiles(); // Refresh list to get actual ID from backend
+      await fetchFiles(); // Refresh list to get actual ID from backend
     } catch (error) {
       console.error("Upload failed", error);
       setFiles(prev => prev.map(f => f.id === tempId ? { ...f, status: 'error' } : f));
@@ -123,22 +146,34 @@ const UploadPage = () => {
         <h3 style={S.cardTitle}>Uploaded Files</h3>
         <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
           <AnimatePresence>
-            {files.map((f,i)=>(
+            {files.map((f,i) => {
+              const fileStyle = getFileIcon(f.name);
+              const IconComp = fileStyle.icon;
+              return (
               <motion.div key={f.id} style={S.fileItem} initial={{opacity:0,x:-20}} animate={{opacity:1,x:0}} exit={{opacity:0,x:20}} transition={{delay:i*0.05}} whileHover={{backgroundColor:'var(--hover-bg)'}}>
-                <div style={S.fileIcon}><FileSpreadsheet size={20} color={f.status==='error'?'var(--danger)':'var(--primary)'}/></div>
-                <div style={{flex:1}}>
-                  <p style={{fontSize:'14px',fontWeight:600,color:f.status==='error'?'var(--danger)':'var(--text-primary)'}}>{f.name}</p>
-                  <p style={{fontSize:'12px',color:'var(--text-tertiary)',marginTop:'2px'}}>{f.size}</p>
-                  {f.status==='uploading'&&<div style={S.progressBar}><motion.div style={S.progressFill} initial={{width:0}} animate={{width:`${f.progress}%`}}/></div>}
-                  {f.status==='error'&&<p style={{fontSize:'12px',color:'var(--danger)',marginTop:'2px'}}>Upload failed</p>}
+                <div style={{...S.fileIcon, background: `${fileStyle.color}15`}}>
+                  <IconComp size={20} color={f.status==='error'?'var(--danger)':fileStyle.color}/>
                 </div>
-                <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+                <div style={{flex:1, display:'flex', alignItems:'center', gap:'16px'}}>
+                  <p style={{fontSize:'14px',fontWeight:700,color:f.status==='error'?'var(--danger)':'var(--text-primary)', flex: 1}}>{f.name}</p>
+                  
+                  {f.status==='uploading' ? (
+                    <div style={{flex: 1, ...S.progressBar}}><motion.div style={S.progressFill} initial={{width:0}} animate={{width:`${f.progress}%`}}/></div>
+                  ) : (
+                    <>
+                      <p style={{fontSize:'13px',fontWeight:500,color:'var(--text-secondary)', width: '80px', textAlign: 'right'}}>{f.size}</p>
+                      <p style={{fontSize:'13px',color:'var(--text-tertiary)', width: '90px', textAlign: 'right'}}>{f.date}</p>
+                    </>
+                  )}
+                  {f.status==='error'&&<p style={{fontSize:'12px',color:'var(--danger)', width: '100px'}}>Upload failed</p>}
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:'10px', marginLeft: '16px'}}>
                   {f.status==='complete'?<CheckCircle size={18} color="var(--success)"/>:
                    f.status==='uploading'?<span style={{fontSize:'12px',fontWeight:600,color:'var(--primary)'}}>{f.progress}%</span>:null}
                   <motion.button style={S.rmBtn} onClick={()=>handleDelete(f)} whileHover={{backgroundColor:'rgba(239,68,68,0.1)'}}><Trash2 size={15} color="var(--text-tertiary)"/></motion.button>
                 </div>
               </motion.div>
-            ))}
+            )})}
           </AnimatePresence>
           {files.length===0&&<div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'40px 20px'}}>
             <p style={{color:'var(--text-tertiary)',fontSize:'14px'}}>No files uploaded yet. Drag & drop to get started.</p>
