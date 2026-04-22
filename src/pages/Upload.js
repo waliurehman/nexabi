@@ -146,101 +146,116 @@ const UploadPage = () => {
 
   return (
     <motion.div style={S.page} variants={pageV} initial="initial" animate="animate" exit="exit">
-      <div style={S.header}><h1 style={S.title}>Upload Data</h1><p style={S.subtitle}>Connect your data sources to start querying with AI</p></div>
+      <style>{`
+        .upload-page { padding: 28px 32px; max-width: 1400px; }
+        .db-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        
+        @media (max-width: 1024px) {
+          .db-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        
+        @media (max-width: 768px) {
+          .upload-page { padding: 20px 16px; }
+          .db-grid { grid-template-columns: 1fr; }
+        }
+      `}</style>
+      <div className="upload-page">
+        <div style={S.header}><h1 style={S.title}>Upload Data</h1><p style={S.subtitle}>Connect your data sources to start querying with AI</p></div>
 
-      <motion.div style={{...S.dropZone,...(isDragging?S.dropActive:{})}} variants={cardV} custom={0}
-        onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
-        whileHover={{borderColor:'var(--primary)'}}>
-        <motion.div style={S.uploadIconWrap} animate={isDragging?{scale:1.1,y:-4}:{scale:1,y:0}}>
-          <Cloud size={32} color={isDragging?'var(--primary)':'var(--text-tertiary)'}/>
-        </motion.div>
-        <h3 style={{fontSize:'18px',fontWeight:700,color:'var(--text-primary)',marginBottom:'6px'}}>{isDragging?'Drop your files here':'Drop CSV or Excel files here'}</h3>
-        <p style={{fontSize:'14px',color:'var(--text-tertiary)',marginBottom:'20px'}}>or click to browse from your computer</p>
-        <input type="file" ref={fileInputRef} onChange={handleSelectFile} style={{ display: 'none' }} accept=".csv,.xlsx,.xls,.pdf,.doc,.docx,.json" />
-        <motion.button onClick={() => fileInputRef.current.click()} style={S.browseBtn} whileHover={{scale:1.03}} whileTap={{scale:0.97}}><UploadIcon size={16}/>Browse Files</motion.button>
-        <div style={{display:'flex',gap:'12px',flexWrap:'wrap',justifyContent:'center',marginTop:'24px'}}>
-          {formats.map(f=>{const I=f.icon;return(
-            <div key={f.name} style={S.formatBadge}><I size={14} color={f.color}/><span>{f.name}</span></div>
-          );})}
-        </div>
-      </motion.div>
-
-      <motion.div style={S.card} variants={cardV} custom={1} initial="initial" animate="animate">
-        <h3 style={S.cardTitle}>Uploaded Files</h3>
-        <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
-          <AnimatePresence>
-            {files.map((f,i) => {
-              const fileStyle = getFileIcon(f.name);
-              const IconComp = fileStyle.icon;
-              return (
-              <motion.div key={f.id} style={S.fileItem} initial={{opacity:0,x:-20}} animate={{opacity:1,x:0}} exit={{opacity:0,x:20}} transition={{delay:i*0.05}} whileHover={{backgroundColor:'var(--hover-bg)'}}>
-                <div style={{...S.fileIcon, background: `${fileStyle.color}15`}}>
-                  <IconComp size={20} color={f.status==='error'?'var(--danger)':fileStyle.color}/>
-                </div>
-                <div style={{flex:1, display:'flex', alignItems:'center', gap:'16px'}}>
-                  <p style={{fontSize:'14px',fontWeight:700,color:f.status==='error'?'var(--danger)':'var(--text-primary)', flex: 1}}>{f.name}</p>
-                  
-                  {f.status==='uploading' ? (
-                    <div style={{flex: 1, ...S.progressBar}}><motion.div style={S.progressFill} initial={{width:0}} animate={{width:`${f.progress}%`}}/></div>
-                  ) : (
-                    <>
-                      <p style={{fontSize:'13px',fontWeight:500,color:'var(--text-secondary)', width: '80px', textAlign: 'right'}}>{f.size}</p>
-                      <p style={{fontSize:'13px',color:'var(--text-tertiary)', width: '90px', textAlign: 'right'}}>{f.date}</p>
-                    </>
-                  )}
-                  {f.status==='error'&&<p style={{fontSize:'12px',color:'var(--danger)', width: '100px'}}>Upload failed</p>}
-                </div>
-                <div style={{display:'flex',alignItems:'center',gap:'10px', marginLeft: '16px'}}>
-                  {f.status==='complete'?<CheckCircle size={18} color="var(--success)"/>:
-                   f.status==='uploading'?<span style={{fontSize:'12px',fontWeight:600,color:'var(--primary)'}}>{f.progress}%</span>:null}
-                  <motion.button style={S.rmBtn} onClick={()=>handleDelete(f)} whileHover={{backgroundColor:'rgba(239,68,68,0.1)'}}><Trash2 size={15} color="var(--text-tertiary)"/></motion.button>
-                </div>
-              </motion.div>
-            )})}
-          </AnimatePresence>
-          {files.length===0&&<div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'40px 20px'}}>
-            <p style={{color:'var(--text-tertiary)',fontSize:'14px'}}>No files uploaded yet. Drag & drop to get started.</p>
-          </div>}
-        </div>
-      </motion.div>
-
-      <motion.div style={S.card} variants={cardV} custom={2} initial="initial" animate="animate">
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'20px'}}>
-          <h3 style={S.cardTitle}>Connected Databases</h3>
-          <motion.button style={S.addBtn} whileHover={{scale:1.03}} whileTap={{scale:0.97}}><Plus size={16}/>New Connection</motion.button>
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'16px'}}>
-          {databases.map((db,i)=>{const I=db.icon;const c=db.status==='connected';return(
-            <motion.div key={db.name} style={S.dbCard} initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} transition={{delay:0.2+i*0.1}} whileHover={{y:-2,boxShadow:'var(--shadow-md)'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'14px'}}>
-                <div style={{width:'46px',height:'46px',borderRadius:'12px',background:`${db.color}15`,display:'flex',alignItems:'center',justifyContent:'center'}}><I size={22} color={db.color}/></div>
-                <div style={{width:'10px',height:'10px',borderRadius:'50%',background:c?'var(--success)':'var(--text-tertiary)'}}/>
-              </div>
-              <h4 style={{fontSize:'16px',fontWeight:700,color:'var(--text-primary)',marginBottom:'4px'}}>{db.name}</h4>
-              <p style={{fontSize:'12px',color:'var(--text-tertiary)',marginBottom:'14px'}}>{db.host}</p>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}}>
-                <span style={{display:'flex',alignItems:'center',gap:'5px',fontSize:'12px',color:'var(--text-secondary)'}}><Database size={13}/>{db.tables} {db.name==='MongoDB'?'collections':'tables'}</span>
-                <span style={{padding:'3px 10px',borderRadius:'6px',fontSize:'11px',fontWeight:600,color:c?'var(--success)':'var(--text-tertiary)',background:c?'rgba(16,185,129,0.1)':'rgba(156,163,175,0.1)'}}>{c?'Connected':'Disconnected'}</span>
-              </div>
-              <motion.button style={{width:'100%',padding:'10px',borderRadius:'10px',border:'none',fontSize:'13px',fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',
-                background:c?'var(--input-bg)':'linear-gradient(135deg,#6C63FF,#3B82F6)',color:c?'var(--text-secondary)':'#fff'}} whileHover={{scale:1.02}}>
-                {c?<><RefreshCw size={14}/>Reconnect</>:<><Plus size={14}/>Connect</>}
-              </motion.button>
-            </motion.div>
-          );})}
-          <motion.div style={S.addCard} initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} transition={{delay:0.4}} whileHover={{borderColor:'var(--primary)'}}>
-            <div style={{width:'56px',height:'56px',borderRadius:'16px',background:'var(--input-bg)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'12px'}}><Plus size={28} color="var(--text-tertiary)"/></div>
-            <p style={{fontSize:'14px',fontWeight:600,color:'var(--text-primary)',marginBottom:'4px'}}>Add New Database</p>
-            <p style={{fontSize:'12px',color:'var(--text-tertiary)'}}>MySQL, SQLite, & more</p>
+        <motion.div style={{...S.dropZone,...(isDragging?S.dropActive:{})}} variants={cardV} custom={0}
+          onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+          whileHover={{borderColor:'var(--primary)'}}>
+          <motion.div style={S.uploadIconWrap} animate={isDragging?{scale:1.1,y:-4}:{scale:1,y:0}}>
+            <Cloud size={32} color={isDragging?'var(--primary)':'var(--text-tertiary)'}/>
           </motion.div>
-        </div>
-      </motion.div>
+          <h3 style={{fontSize:'18px',fontWeight:700,color:'var(--text-primary)',marginBottom:'6px'}}>{isDragging?'Drop your files here':'Drop CSV or Excel files here'}</h3>
+          <p style={{fontSize:'14px',color:'var(--text-tertiary)',marginBottom:'20px'}}>or click to browse from your computer</p>
+          <input type="file" ref={fileInputRef} onChange={handleSelectFile} style={{ display: 'none' }} accept=".csv,.xlsx,.xls,.pdf,.doc,.docx,.json" />
+          <motion.button onClick={() => fileInputRef.current.click()} style={S.browseBtn} whileHover={{scale:1.03}} whileTap={{scale:0.97}}><UploadIcon size={16}/>Browse Files</motion.button>
+          <div style={{display:'flex',gap:'12px',flexWrap:'wrap',justifyContent:'center',marginTop:'24px'}}>
+            {formats.map(f=>{const I=f.icon;return(
+              <div key={f.name} style={S.formatBadge}><I size={14} color={f.color}/><span>{f.name}</span></div>
+            );})}
+          </div>
+        </motion.div>
+
+        <motion.div style={S.card} variants={cardV} custom={1} initial="initial" animate="animate">
+          <h3 style={S.cardTitle}>Uploaded Files</h3>
+          <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
+            <AnimatePresence>
+              {files.map((f,i) => {
+                const fileStyle = getFileIcon(f.name);
+                const IconComp = fileStyle.icon;
+                return (
+                <motion.div key={f.id} style={S.fileItem} initial={{opacity:0,x:-20}} animate={{opacity:1,x:0}} exit={{opacity:0,x:20}} transition={{delay:i*0.05}} whileHover={{backgroundColor:'var(--hover-bg)'}}>
+                  <div style={{...S.fileIcon, background: `${fileStyle.color}15`}}>
+                    <IconComp size={20} color={f.status==='error'?'var(--danger)':fileStyle.color}/>
+                  </div>
+                  <div style={{flex:1, display:'flex', alignItems:'center', gap:'16px', flexWrap: 'wrap'}}>
+                    <p style={{fontSize:'14px',fontWeight:700,color:f.status==='error'?'var(--danger)':'var(--text-primary)', flex: 1, minWidth: '150px'}}>{f.name}</p>
+                    
+                    {f.status==='uploading' ? (
+                      <div style={{flex: 1, ...S.progressBar, minWidth: '100px'}}><motion.div style={S.progressFill} initial={{width:0}} animate={{width:`${f.progress}%`}}/></div>
+                    ) : (
+                      <div style={{display: 'flex', gap: '16px'}}>
+                        <p style={{fontSize:'13px',fontWeight:500,color:'var(--text-secondary)'}}>{f.size}</p>
+                        <p style={{fontSize:'13px',color:'var(--text-tertiary)'}}>{f.date}</p>
+                      </div>
+                    )}
+                    {f.status==='error'&&<p style={{fontSize:'12px',color:'var(--danger)'}}>Upload failed</p>}
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:'10px', marginLeft: 'auto'}}>
+                    {f.status==='complete'?<CheckCircle size={18} color="var(--success)"/>:
+                     f.status==='uploading'?<span style={{fontSize:'12px',fontWeight:600,color:'var(--primary)'}}>{f.progress}%</span>:null}
+                    <motion.button style={S.rmBtn} onClick={()=>handleDelete(f)} whileHover={{backgroundColor:'rgba(239,68,68,0.1)'}}><Trash2 size={15} color="var(--text-tertiary)"/></motion.button>
+                  </div>
+                </motion.div>
+              )})}
+            </AnimatePresence>
+            {files.length===0&&<div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'40px 20px'}}>
+              <p style={{color:'var(--text-tertiary)',fontSize:'14px'}}>No files uploaded yet. Drag & drop to get started.</p>
+            </div>}
+          </div>
+        </motion.div>
+
+        <motion.div style={S.card} variants={cardV} custom={2} initial="initial" animate="animate">
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'20px'}}>
+            <h3 style={S.cardTitle}>Connected Databases</h3>
+            <motion.button style={S.addBtn} whileHover={{scale:1.03}} whileTap={{scale:0.97}}><Plus size={16}/>New Connection</motion.button>
+          </div>
+          <div className="db-grid">
+            {databases.map((db,i)=>{const I=db.icon;const c=db.status==='connected';return(
+              <motion.div key={db.name} style={S.dbCard} initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} transition={{delay:0.2+i*0.1}} whileHover={{y:-2,boxShadow:'var(--shadow-md)'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'14px'}}>
+                  <div style={{width:'46px',height:'46px',borderRadius:'12px',background:`${db.color}15`,display:'flex',alignItems:'center',justifyContent:'center'}}><I size={22} color={db.color}/></div>
+                  <div style={{width:'10px',height:'10px',borderRadius:'50%',background:c?'var(--success)':'var(--text-tertiary)'}}/>
+                </div>
+                <h4 style={{fontSize:'16px',fontWeight:700,color:'var(--text-primary)',marginBottom:'4px'}}>{db.name}</h4>
+                <p style={{fontSize:'12px',color:'var(--text-tertiary)',marginBottom:'14px'}}>{db.host}</p>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}}>
+                  <span style={{display:'flex',alignItems:'center',gap:'5px',fontSize:'12px',color:'var(--text-secondary)'}}><Database size={13}/>{db.tables} {db.name==='MongoDB'?'collections':'tables'}</span>
+                  <span style={{padding:'3px 10px',borderRadius:'6px',fontSize:'11px',fontWeight:600,color:c?'var(--success)':'var(--text-tertiary)',background:c?'rgba(16,185,129,0.1)':'rgba(156,163,175,0.1)'}}>{c?'Connected':'Disconnected'}</span>
+                </div>
+                <motion.button style={{width:'100%',padding:'10px',borderRadius:'10px',border:'none',fontSize:'13px',fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',
+                  background:c?'var(--input-bg)':'linear-gradient(135deg,#6C63FF,#3B82F6)',color:c?'var(--text-secondary)':'#fff'}} whileHover={{scale:1.02}}>
+                  {c?<><RefreshCw size={14}/>Reconnect</>:<><Plus size={14}/>Connect</>}
+                </motion.button>
+              </motion.div>
+            );})}
+            <motion.div style={S.addCard} initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} transition={{delay:0.4}} whileHover={{borderColor:'var(--primary)'}}>
+              <div style={{width:'56px',height:'56px',borderRadius:'16px',background:'var(--input-bg)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'12px'}}><Plus size={28} color="var(--text-tertiary)"/></div>
+              <p style={{fontSize:'14px',fontWeight:600,color:'var(--text-primary)',marginBottom:'4px'}}>Add New Database</p>
+              <p style={{fontSize:'12px',color:'var(--text-tertiary)'}}>MySQL, SQLite, & more</p>
+            </motion.div>
+          </div>
+        </motion.div>
+      </div>
     </motion.div>
   );
 };
 
 const S = {
-  page:{padding:'28px 32px',maxWidth:'1400px'},
+  page:{},
   header:{marginBottom:'28px'},
   title:{fontSize:'26px',fontWeight:700,color:'var(--text-primary)',letterSpacing:'-0.02em'},
   subtitle:{fontSize:'14px',color:'var(--text-secondary)',marginTop:'6px'},
@@ -251,7 +266,7 @@ const S = {
   formatBadge:{display:'flex',alignItems:'center',gap:'6px',padding:'6px 14px',borderRadius:'8px',background:'var(--input-bg)',fontSize:'12px',fontWeight:500,color:'var(--text-secondary)',border:'1px solid var(--border)'},
   card:{background:'var(--card)',borderRadius:'16px',padding:'24px',boxShadow:'var(--shadow-card)',border:'1px solid var(--border)',marginBottom:'24px'},
   cardTitle:{fontSize:'16px',fontWeight:700,color:'var(--text-primary)',marginBottom:'16px'},
-  fileItem:{display:'flex',alignItems:'center',gap:'14px',padding:'14px 16px',borderRadius:'12px',transition:'background 0.15s ease'},
+  fileItem:{display:'flex',alignItems:'center',gap:'14px',padding:'14px 16px',borderRadius:'12px',transition:'background 0.15s ease', flexWrap: 'wrap'},
   fileIcon:{width:'42px',height:'42px',borderRadius:'10px',background:'rgba(108,99,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0},
   progressBar:{height:'4px',background:'var(--input-bg)',borderRadius:'2px',marginTop:'8px',overflow:'hidden'},
   progressFill:{height:'100%',background:'linear-gradient(135deg,#6C63FF,#3B82F6)',borderRadius:'2px'},

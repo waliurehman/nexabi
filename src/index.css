@@ -197,9 +197,17 @@ img {
   }
 }
 
-/* ===== RESPONSIVE ===== */
+/* ===== RESPONSIVE UTILITIES ===== */
+.hide-on-mobile { display: block; }
+.hide-on-tablet { display: block; }
+.hide-on-desktop { display: none; }
+
 @media (max-width: 768px) {
   :root {
-    --sidebar-width: 0px;
+    --sidebar-width: 0px; /* Sidebar becomes overlay on mobile */
+    --topbar-height: 60px; /* Slightly smaller topbar on mobile */
   }
+  .hide-on-tablet { display: none !important; }
+  .hide-on-mobile { display: none !important; }
+  .hide-on-desktop { display: block; }
 }

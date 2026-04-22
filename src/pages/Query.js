@@ -936,9 +936,9 @@ IMPORTANT:
         )}
       </AnimatePresence>
 
-      <div style={S.container}>
-        <div style={S.chatArea}>
-          <div style={S.messagesArea}>
+      <div className="query-container">
+        <div className="chat-area">
+          <div className="messages-area">
             <AnimatePresence>
               {messages.map(msg => (
                 <motion.div key={msg.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} style={{ display: 'flex', gap: '12px', justifyContent: msg.type === 'user' ? 'flex-end' : 'flex-start', alignItems: 'flex-start' }}>
@@ -978,7 +978,7 @@ IMPORTANT:
             )}
             <div ref={endRef} />
           </div>
-          <div style={S.inputArea}>
+          <div className="input-area">
             <div style={S.inputWrap}>
               <motion.button style={S.attachBtn} whileHover={{ backgroundColor: 'var(--hover-bg)' }}><Paperclip size={18} color="var(--text-tertiary)" /></motion.button>
               <input type="text" placeholder="Ask NexaBI to build a chart, an animated component, or an interactive tool..." value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} style={S.input} />
@@ -988,7 +988,7 @@ IMPORTANT:
             </div>
           </div>
         </div>
-        <div style={S.panel}>
+        <div className="side-panel">
           <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>Select Dataset</h3>
           <p style={{ fontSize: '13px', color: 'var(--text-tertiary)', marginTop: '4px', marginBottom: '16px' }}>Connect your uploaded data to AI</p>
 
@@ -1070,7 +1070,28 @@ IMPORTANT:
           </div>
         </div>
       </div>
-      <style>{`@keyframes typing{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}`}</style>
+      <style>{`
+        @keyframes typing {
+          0%, 100% { opacity: 0.3; transform: scale(0.8); }
+          50% { opacity: 1; transform: scale(1); }
+        }
+        .query-container { display: flex; height: 100%; }
+        .chat-area { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); overflow: hidden; }
+        .side-panel { width: 300px; padding: 24px; background: var(--card); overflow-y: auto; flex-shrink: 0; }
+        .messages-area { flex: 1; padding: 24px 28px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+        .input-area { padding: 16px 24px 20px; border-top: 1px solid var(--border); background: var(--card); }
+        
+        @media (max-width: 1024px) {
+          .query-container { flex-direction: column; }
+          .side-panel { width: 100%; border-left: none; border-top: 1px solid var(--border); height: auto; max-height: 40vh; }
+          .chat-area { border-right: none; }
+        }
+        
+        @media (max-width: 768px) {
+          .messages-area { padding: 16px; }
+          .input-area { padding: 12px 16px 16px; }
+        }
+      `}</style>
     </motion.div>
   );
 };
@@ -1088,22 +1109,16 @@ const CustomizedTreemapContent = ({ root, depth, x, y, width, height, index, pay
 
 const S = {
   page: { height: 'calc(100vh - var(--topbar-height))', padding: 0 },
-  container: { display: 'flex', height: '100%' },
-  chatArea: { flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)' },
-
-  messagesArea: { flex: 1, padding: '24px 28px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px' },
   aiAvatar: { width: '34px', height: '34px', borderRadius: '10px', background: 'linear-gradient(135deg,#6C63FF,#3B82F6)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 8px rgba(108,99,255,0.25)' },
   userAvatar: { width: '34px', height: '34px', borderRadius: '10px', background: 'linear-gradient(135deg,#3B82F6,#06B6D4)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   bubble: { maxWidth: '85%', borderRadius: '16px', padding: '14px 18px', width: '100%' },
   userBubble: { background: 'linear-gradient(135deg,#6C63FF,#3B82F6)', borderBottomRightRadius: '4px', boxShadow: '0 2px 12px rgba(108,99,255,0.2)', maxWidth: '75%', width: 'auto' },
   aiBubble: { background: 'var(--card)', border: '1px solid var(--border)', borderBottomLeftRadius: '4px', boxShadow: 'var(--shadow-card)' },
   actBtn: { width: '28px', height: '28px', borderRadius: '8px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' },
-  inputArea: { padding: '16px 24px 20px', borderTop: '1px solid var(--border)', background: 'var(--card)' },
   inputWrap: { display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--input-bg)', borderRadius: '14px', padding: '6px 8px 6px 6px', border: '1px solid var(--border)' },
   attachBtn: { width: '40px', height: '40px', borderRadius: '10px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   input: { flex: 1, background: 'transparent', fontSize: '14px', color: 'var(--text-primary)', padding: '8px 0', border: 'none', outline: 'none' },
   sendBtn: { width: '40px', height: '40px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg,#6C63FF,#3B82F6)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(108,99,255,0.25)' },
-  panel: { width: '300px', padding: '24px', background: 'var(--card)', overflowY: 'auto', flexShrink: 0 },
   sourceItem: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '12px', cursor: 'pointer' },
   sourceIcon: { width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(108,99,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   sugBtn: { display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '10px 14px', marginBottom: '6px', borderRadius: '10px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 500, cursor: 'pointer', textAlign: 'left', lineHeight: 1.4 },

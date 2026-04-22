@@ -71,151 +71,173 @@ const Dashboard = () => {
 
   return (
     <motion.div style={S.page} variants={pageV} initial="initial" animate="animate" exit="exit">
-      <div style={S.header}>
-        <h1 style={S.title}>Systems Overview</h1>
-        <p style={S.subtitle}>
-          Neural network throughput is currently operating at{' '}
-          <span style={{ color:'var(--success)', fontWeight:600 }}>98.4% efficiency</span>. All clusters are stable.
-        </p>
-      </div>
+      <style>{`
+        .dash-page { padding: 28px 32px; max-width: 1400px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 24px; }
+        .main-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; margin-bottom: 24px; }
+        .bottom-card { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .bottom-card-actions { display: flex; align-items: center; gap: 16px; }
+        
+        @media (max-width: 1024px) {
+          .stats-grid { grid-template-columns: repeat(2, 1fr); }
+          .main-grid { grid-template-columns: 1fr; }
+        }
+        
+        @media (max-width: 768px) {
+          .dash-page { padding: 20px 16px; }
+          .stats-grid { grid-template-columns: 1fr; }
+          .bottom-card { flex-direction: column; align-items: flex-start; gap: 20px; }
+          .bottom-card-actions { width: 100%; justify-content: space-between; }
+          .bottom-card-actions button { flex: 1; justify-content: center; }
+        }
+      `}</style>
+      
+      <div className="dash-page">
+        <div style={S.header}>
+          <h1 style={S.title}>Systems Overview</h1>
+          <p style={S.subtitle}>
+            Neural network throughput is currently operating at{' '}
+            <span style={{ color:'var(--success)', fontWeight:600 }}>98.4% efficiency</span>. All clusters are stable.
+          </p>
+        </div>
 
-      <div style={S.statsGrid}>
-        {stats.map((s, i) => {
-          const Icon = s.icon;
-          return (
-            <motion.div key={s.title} style={S.statCard} variants={cardV} initial="initial" animate="animate" custom={i}
-              whileHover={{ y:-3, boxShadow:'var(--shadow-md)' }}>
-              <div style={S.statTop}>
-                <div>
-                  <p style={S.statLabel}>{s.title}</p>
-                  <h3 style={S.statValue}>{s.value}</h3>
+        <div className="stats-grid">
+          {stats.map((s, i) => {
+            const Icon = s.icon;
+            return (
+              <motion.div key={s.title} style={S.statCard} variants={cardV} initial="initial" animate="animate" custom={i}
+                whileHover={{ y:-3, boxShadow:'var(--shadow-md)' }}>
+                <div style={S.statTop}>
+                  <div>
+                    <p style={S.statLabel}>{s.title}</p>
+                    <h3 style={S.statValue}>{s.value}</h3>
+                  </div>
+                  <div style={{ ...S.statIcon, background: s.iconBg }}><Icon size={20} color="#fff" /></div>
                 </div>
-                <div style={{ ...S.statIcon, background: s.iconBg }}><Icon size={20} color="#fff" /></div>
-              </div>
-              <span style={{
-                display:'inline-flex', alignItems:'center', gap:'4px', fontSize:'12px', fontWeight:600,
-                padding:'3px 8px', borderRadius:'6px', marginTop:'6px', marginBottom:'8px',
-                color: s.up ? 'var(--success)' : 'var(--danger)',
-                background: s.up ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-              }}>
-                {s.up && <TrendingUp size={12} />}{s.change}
-              </span>
-              <div style={{ marginLeft:'-8px', marginRight:'-8px' }}>
-                <ResponsiveContainer width="100%" height={50}>
-                  <BarChart data={miniBarData} barCategoryGap="20%">
-                    <Bar dataKey="v" radius={[3,3,0,0]}>
-                      {miniBarData.map((_, idx) => <rect key={idx} fill={s.bars[idx]} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </motion.div>
-          );
-        })}
-      </div>
+                <span style={{
+                  display:'inline-flex', alignItems:'center', gap:'4px', fontSize:'12px', fontWeight:600,
+                  padding:'3px 8px', borderRadius:'6px', marginTop:'6px', marginBottom:'8px',
+                  color: s.up ? 'var(--success)' : 'var(--danger)',
+                  background: s.up ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                }}>
+                  {s.up && <TrendingUp size={12} />}{s.change}
+                </span>
+                <div style={{ marginLeft:'-8px', marginRight:'-8px' }}>
+                  <ResponsiveContainer width="100%" height={50}>
+                    <BarChart data={miniBarData} barCategoryGap="20%">
+                      <Bar dataKey="v" radius={[3,3,0,0]}>
+                        {miniBarData.map((_, idx) => <rect key={idx} fill={s.bars[idx]} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
 
-      <div style={S.mainGrid}>
-        <motion.div style={S.card} variants={cardV} initial="initial" animate="animate" custom={4}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-            <div>
-              <h3 style={S.cardTitle}>Intelligence Growth</h3>
-              <p style={{ fontSize:'13px', color:'var(--text-tertiary)' }}>Neural processing speed across global nodes</p>
+        <div className="main-grid">
+          <motion.div style={S.card} variants={cardV} initial="initial" animate="animate" custom={4}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h3 style={S.cardTitle}>Intelligence Growth</h3>
+                <p style={{ fontSize:'13px', color:'var(--text-tertiary)' }}>Neural processing speed across global nodes</p>
+              </div>
+              <div style={S.timeFilters}>
+                {['9H','24H','7D'].map(f => (
+                  <button key={f} onClick={() => setTimeFilter(f)} style={{
+                    ...S.timeBtn, ...(timeFilter === f ? S.timeBtnActive : {}),
+                  }}>{f}</button>
+                ))}
+              </div>
             </div>
-            <div style={S.timeFilters}>
-              {['9H','24H','7D'].map(f => (
-                <button key={f} onClick={() => setTimeFilter(f)} style={{
-                  ...S.timeBtn, ...(timeFilter === f ? S.timeBtnActive : {}),
-                }}>{f}</button>
+            <div style={{ height:'300px', marginTop:'16px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="qG" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#6C63FF" stopOpacity={0.2} />
+                      <stop offset="100%" stopColor="#6C63FF" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
+                  <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill:'var(--chart-text)', fontSize:12 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill:'var(--chart-text)', fontSize:12 }} />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Area type="monotone" dataKey="queries" stroke="#6C63FF" strokeWidth={2.5} fill="url(#qG)" dot={false}
+                    activeDot={{ r:6, fill:'#6C63FF', stroke:'var(--card)', strokeWidth:2 }} name="Queries" />
+                  <Line type="monotone" dataKey="documents" stroke="#06B6D4" strokeWidth={2} strokeDasharray="6 4" dot={false}
+                    activeDot={{ r:5, fill:'#06B6D4', stroke:'var(--card)', strokeWidth:2 }} name="Documents" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
+
+          <motion.div style={S.card} variants={cardV} initial="initial" animate="animate" custom={5}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
+              <h3 style={S.cardTitle}>Neural Activity</h3>
+              <button style={{ background:'none', border:'none', color:'var(--text-tertiary)', fontSize:'18px', cursor:'pointer' }}>•••</button>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:'4px', flex:1 }}>
+              {activityItems.map((item, i) => {
+                const Icon = item.icon;
+                return (
+                  <motion.div key={i} style={S.activityItem}
+                    initial={{ opacity:0, x:20 }} animate={{ opacity:1, x:0 }} transition={{ delay:0.4+i*0.1 }}
+                    whileHover={{ backgroundColor:'var(--hover-bg)' }}>
+                    <div style={{ width:'36px', height:'36px', borderRadius:'10px', background:`${item.color}15`,
+                      display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                      <Icon size={16} color={item.color} />
+                    </div>
+                    <div style={{ flex:1 }}>
+                      <p style={{ fontSize:'13px', fontWeight:600, color:'var(--text-primary)', marginBottom:'3px' }}>{item.title}</p>
+                      <p style={{ fontSize:'12px', color:'var(--text-tertiary)', lineHeight:1.4 }}>{item.desc}</p>
+                    </div>
+                    <span style={{ fontSize:'11px', color:'var(--text-tertiary)', whiteSpace:'nowrap' }}>{item.time}</span>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
+        </div>
+
+        <motion.div className="bottom-card" style={S.card}
+          variants={cardV} initial="initial" animate="animate" custom={6}
+          whileHover={{ boxShadow:'0 12px 40px rgba(108,99,255,0.15)' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'18px' }}>
+            <div style={{ width:'48px', height:'48px', borderRadius:'14px', background:'linear-gradient(135deg,#6C63FF,#3B82F6)',
+              display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 16px rgba(108,99,255,0.3)', flexShrink: 0 }}>
+              <Zap size={24} color="#fff" />
+            </div>
+            <div>
+              <h3 style={{ fontSize:'16px', fontWeight:700, color:'var(--text-primary)' }}>Instant Model Launch</h3>
+              <p style={{ fontSize:'13px', color:'var(--text-tertiary)', marginTop:'2px' }}>Initialize a pre-trained instance in 4.2 seconds</p>
+            </div>
+          </div>
+          <div className="bottom-card-actions">
+            <div style={{ display:'flex', gap:'8px', flexWrap: 'wrap' }}>
+              {['GPT','SQL'].map(t => (
+                <span key={t} style={{ display:'flex', alignItems:'center', gap:'6px', padding:'6px 12px', borderRadius:'8px',
+                  fontSize:'12px', fontWeight:600, background:'var(--input-bg)', color:'var(--text-secondary)', border:'1px solid var(--border)' }}>
+                  {t === 'GPT' ? <BarChart2 size={14} /> : <Database size={14} />} {t}
+                </span>
               ))}
             </div>
-          </div>
-          <div style={{ height:'300px', marginTop:'16px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="qG" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#6C63FF" stopOpacity={0.2} />
-                    <stop offset="100%" stopColor="#6C63FF" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
-                <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill:'var(--chart-text)', fontSize:12 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill:'var(--chart-text)', fontSize:12 }} />
-                <Tooltip content={<ChartTooltip />} />
-                <Area type="monotone" dataKey="queries" stroke="#6C63FF" strokeWidth={2.5} fill="url(#qG)" dot={false}
-                  activeDot={{ r:6, fill:'#6C63FF', stroke:'var(--card)', strokeWidth:2 }} name="Queries" />
-                <Line type="monotone" dataKey="documents" stroke="#06B6D4" strokeWidth={2} strokeDasharray="6 4" dot={false}
-                  activeDot={{ r:5, fill:'#06B6D4', stroke:'var(--card)', strokeWidth:2 }} name="Documents" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </motion.div>
-
-        <motion.div style={S.card} variants={cardV} initial="initial" animate="animate" custom={5}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
-            <h3 style={S.cardTitle}>Neural Activity</h3>
-            <button style={{ background:'none', border:'none', color:'var(--text-tertiary)', fontSize:'18px', cursor:'pointer' }}>•••</button>
-          </div>
-          <div style={{ display:'flex', flexDirection:'column', gap:'4px', flex:1 }}>
-            {activityItems.map((item, i) => {
-              const Icon = item.icon;
-              return (
-                <motion.div key={i} style={S.activityItem}
-                  initial={{ opacity:0, x:20 }} animate={{ opacity:1, x:0 }} transition={{ delay:0.4+i*0.1 }}
-                  whileHover={{ backgroundColor:'var(--hover-bg)' }}>
-                  <div style={{ width:'36px', height:'36px', borderRadius:'10px', background:`${item.color}15`,
-                    display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                    <Icon size={16} color={item.color} />
-                  </div>
-                  <div style={{ flex:1 }}>
-                    <p style={{ fontSize:'13px', fontWeight:600, color:'var(--text-primary)', marginBottom:'3px' }}>{item.title}</p>
-                    <p style={{ fontSize:'12px', color:'var(--text-tertiary)', lineHeight:1.4 }}>{item.desc}</p>
-                  </div>
-                  <span style={{ fontSize:'11px', color:'var(--text-tertiary)', whiteSpace:'nowrap' }}>{item.time}</span>
-                </motion.div>
-              );
-            })}
+            <motion.button style={S.ctaBtn} whileHover={{ scale:1.03 }} whileTap={{ scale:0.97 }}>
+              Launch <ArrowUpRight size={16} />
+            </motion.button>
           </div>
         </motion.div>
       </div>
-
-      <motion.div style={{ ...S.card, display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer' }}
-        variants={cardV} initial="initial" animate="animate" custom={6}
-        whileHover={{ boxShadow:'0 12px 40px rgba(108,99,255,0.15)' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'18px' }}>
-          <div style={{ width:'48px', height:'48px', borderRadius:'14px', background:'linear-gradient(135deg,#6C63FF,#3B82F6)',
-            display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 16px rgba(108,99,255,0.3)' }}>
-            <Zap size={24} color="#fff" />
-          </div>
-          <div>
-            <h3 style={{ fontSize:'16px', fontWeight:700, color:'var(--text-primary)' }}>Instant Model Launch</h3>
-            <p style={{ fontSize:'13px', color:'var(--text-tertiary)', marginTop:'2px' }}>Initialize a pre-trained instance in 4.2 seconds</p>
-          </div>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
-          <div style={{ display:'flex', gap:'8px' }}>
-            {['GPT','SQL'].map(t => (
-              <span key={t} style={{ display:'flex', alignItems:'center', gap:'6px', padding:'6px 12px', borderRadius:'8px',
-                fontSize:'12px', fontWeight:600, background:'var(--input-bg)', color:'var(--text-secondary)', border:'1px solid var(--border)' }}>
-                {t === 'GPT' ? <BarChart2 size={14} /> : <Database size={14} />} {t}
-              </span>
-            ))}
-          </div>
-          <motion.button style={S.ctaBtn} whileHover={{ scale:1.03 }} whileTap={{ scale:0.97 }}>
-            Launch Dashboard <ArrowUpRight size={16} />
-          </motion.button>
-        </div>
-      </motion.div>
     </motion.div>
   );
 };
 
 const S = {
-  page: { padding:'28px 32px', maxWidth:'1400px' },
+  page: { },
   header: { marginBottom:'28px' },
   title: { fontSize:'26px', fontWeight:700, color:'var(--text-primary)', letterSpacing:'-0.02em' },
   subtitle: { fontSize:'14px', color:'var(--text-secondary)', marginTop:'6px', lineHeight:1.5 },
-  statsGrid: { display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'20px', marginBottom:'24px' },
   statCard: {
     background:'var(--card)', borderRadius:'16px', padding:'22px',
     boxShadow:'var(--shadow-card)', border:'1px solid var(--border)',
@@ -225,7 +247,6 @@ const S = {
   statLabel: { fontSize:'11px', fontWeight:600, color:'var(--text-tertiary)', letterSpacing:'0.06em', textTransform:'uppercase', marginBottom:'8px' },
   statValue: { fontSize:'28px', fontWeight:700, color:'var(--text-primary)', letterSpacing:'-0.02em', lineHeight:1.1 },
   statIcon: { width:'42px', height:'42px', borderRadius:'12px', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 12px rgba(0,0,0,0.1)' },
-  mainGrid: { display:'grid', gridTemplateColumns:'1.6fr 1fr', gap:'20px', marginBottom:'24px' },
   card: {
     background:'var(--card)', borderRadius:'16px', padding:'24px',
     boxShadow:'var(--shadow-card)', border:'1px solid var(--border)',
@@ -238,7 +259,7 @@ const S = {
   ctaBtn: {
     background:'linear-gradient(135deg,#6C63FF,#3B82F6)', color:'#fff', border:'none',
     borderRadius:'10px', padding:'12px 24px', fontSize:'14px', fontWeight:600, cursor:'pointer',
-    display:'flex', alignItems:'center', gap:'8px', boxShadow:'0 4px 16px rgba(108,99,255,0.3)',
+    display:'flex', alignItems:'center', gap:'8px', boxShadow:'0 4px 16px rgba(108,99,255,0.3)', whiteSpace: 'nowrap'
   },
 };
 

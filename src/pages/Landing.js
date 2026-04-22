@@ -110,8 +110,44 @@ const plans = [
 const Landing = () => {
   const navigate = useNavigate();
 
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+
   return (
     <div style={styles.page}>
+      <style>{`
+        .nav-links { display: flex; gap: 32px; }
+        .nav-actions { display: flex; gap: 12px; align-items: center; }
+        .mobile-menu-btn { display: none; background: transparent; border: none; cursor: pointer; color: #1E1E2E; }
+        
+        .hero-title { font-size: 56px; }
+        .hero-stats { display: flex; gap: 48px; justify-content: center; }
+        
+        .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; max-width: 1100px; margin: 0 auto; }
+        .steps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; max-width: 1000px; margin: 0 auto; }
+        .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; max-width: 1000px; margin: 0 auto; align-items: start; }
+        .footer-inner { display: flex; justify-content: space-between; gap: 60px; max-width: 1100px; margin: 0 auto; margin-bottom: 40px; }
+        
+        @media (max-width: 1024px) {
+          .features-grid { grid-template-columns: repeat(2, 1fr); }
+          .pricing-grid { grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        }
+        
+        @media (max-width: 768px) {
+          .nav-links, .nav-actions { display: none; }
+          .mobile-menu-btn { display: flex; }
+          .hero-title { font-size: 36px; }
+          .hero-stats { flex-direction: column; gap: 24px; }
+          .features-grid { grid-template-columns: 1fr; }
+          .steps-grid { grid-template-columns: 1fr; }
+          .pricing-grid { grid-template-columns: 1fr; }
+          .footer-inner { flex-direction: column; gap: 32px; text-align: center; }
+          .footer-brand { margin: 0 auto; }
+          .footer-logo { justify-content: center; }
+          .footer-links { flex-direction: column; gap: 32px; text-align: center; }
+          .footer-bottom { flex-direction: column; gap: 16px; text-align: center; }
+        }
+      `}</style>
+
       {/* ===== NAVBAR ===== */}
       <motion.nav
         style={styles.navbar}
@@ -127,12 +163,12 @@ const Landing = () => {
             <span style={styles.logoText}>Nexa</span>
             <span style={styles.logoBold}>BI</span>
           </div>
-          <div style={styles.navLinks}>
+          <div className="nav-links">
             <a href="#features" style={styles.navLink}>Features</a>
             <a href="#how-it-works" style={styles.navLink}>How it Works</a>
             <a href="#pricing" style={styles.navLink}>Pricing</a>
           </div>
-          <div style={styles.navActions}>
+          <div className="nav-actions">
             <button style={styles.loginBtn} onClick={() => navigate('/dashboard')}>Log In</button>
             <motion.button
               style={styles.signupBtn}
@@ -144,8 +180,35 @@ const Landing = () => {
               <ArrowRight size={16} />
             </motion.button>
           </div>
+          <button className="mobile-menu-btn" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+            <div style={{ padding: '8px' }}>☰</div>
+          </button>
         </div>
       </motion.nav>
+
+      {/* Mobile Menu Dropdown */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            style={{
+              position: 'fixed', top: '72px', left: 0, right: 0,
+              background: '#fff', zIndex: 999, borderBottom: '1px solid #E5E7EB',
+              padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+            }}
+          >
+            <a href="#features" style={styles.navLink} onClick={() => setIsMobileMenuOpen(false)}>Features</a>
+            <a href="#how-it-works" style={styles.navLink} onClick={() => setIsMobileMenuOpen(false)}>How it Works</a>
+            <a href="#pricing" style={styles.navLink} onClick={() => setIsMobileMenuOpen(false)}>Pricing</a>
+            <div style={{ height: '1px', background: '#E5E7EB', margin: '8px 0' }} />
+            <button style={{...styles.loginBtn, textAlign: 'left', padding: '8px 0'}} onClick={() => navigate('/dashboard')}>Log In</button>
+            <button style={{...styles.signupBtn, justifyContent: 'center'}} onClick={() => navigate('/dashboard')}>Start Free</button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ===== HERO ===== */}
       <section style={styles.hero}>
@@ -161,7 +224,8 @@ const Landing = () => {
             Powered by GPT-4 & Advanced Analytics
           </motion.div>
           <motion.h1
-            style={styles.heroTitle}
+            className="hero-title"
+            style={{...styles.heroTitle, fontSize: undefined}} // override inline size
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3, duration: 0.6 }}
@@ -194,6 +258,7 @@ const Landing = () => {
               <ArrowRight size={18} />
             </motion.button>
             <motion.button
+              className="hide-on-mobile"
               style={styles.heroSecondaryBtn}
               whileHover={{ scale: 1.04, borderColor: '#6C63FF' }}
               whileTap={{ scale: 0.97 }}
@@ -203,7 +268,7 @@ const Landing = () => {
             </motion.button>
           </motion.div>
           <motion.div
-            style={styles.heroStats}
+            className="hero-stats"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 1, duration: 0.6 }}
@@ -231,7 +296,7 @@ const Landing = () => {
             From CSV imports to AI-powered queries, NexaBI gives you a complete toolkit for business intelligence.
           </p>
         </motion.div>
-        <div style={styles.featuresGrid}>
+        <div className="features-grid">
           {features.map((f, i) => {
             const Icon = f.icon;
             return (
@@ -262,7 +327,7 @@ const Landing = () => {
             Go from raw data to actionable intelligence in minutes — no coding required.
           </p>
         </motion.div>
-        <div style={styles.stepsGrid}>
+        <div className="steps-grid">
           {steps.map((step, i) => (
             <motion.div
               key={step.num}
@@ -288,7 +353,7 @@ const Landing = () => {
             Start free, upgrade when you need more. No hidden fees, cancel anytime.
           </p>
         </motion.div>
-        <div style={styles.pricingGrid}>
+        <div className="pricing-grid">
           {plans.map((plan, i) => (
             <motion.div
               key={plan.name}
@@ -342,7 +407,7 @@ const Landing = () => {
       </section>
 
       {/* ===== CTA ===== */}
-      <motion.section style={styles.ctaSection} {...fadeUp}>
+      <motion.section style={{...styles.ctaSection, padding: '40px 16px'}} {...fadeUp}>
         <div style={styles.ctaInner}>
           <h2 style={styles.ctaTitle}>Ready to transform your data?</h2>
           <p style={styles.ctaDesc}>
@@ -362,9 +427,9 @@ const Landing = () => {
 
       {/* ===== FOOTER ===== */}
       <footer style={styles.footer}>
-        <div style={styles.footerInner}>
-          <div style={styles.footerBrand}>
-            <div style={styles.footerLogo}>
+        <div className="footer-inner">
+          <div className="footer-brand" style={styles.footerBrand}>
+            <div className="footer-logo" style={styles.footerLogo}>
               <div style={styles.logoIcon}>
                 <Sparkles size={18} color="#fff" />
               </div>
@@ -375,7 +440,7 @@ const Landing = () => {
               Transform your data into intelligence with AI-powered analytics.
             </p>
           </div>
-          <div style={styles.footerLinks}>
+          <div className="footer-links">
             <div style={styles.footerCol}>
               <h4 style={styles.footerColTitle}>Product</h4>
               <a href="#features" style={styles.footerLink}>Features</a>
@@ -398,7 +463,7 @@ const Landing = () => {
             </div>
           </div>
         </div>
-        <div style={styles.footerBottom}>
+        <div className="footer-bottom" style={styles.footerBottom}>
           <p style={styles.footerCopy}>© 2026 NexaBI. All rights reserved.</p>
           <div style={styles.footerSocials}>
             <Globe size={18} color="var(--text-tertiary)" style={{ cursor: 'pointer' }} />

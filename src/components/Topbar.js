@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Bell, Sun, Moon, Menu, ChevronDown, User, Settings, Key, LogOut } from 'lucide-react';
+import { Search, Bell, Sun, Moon, Menu, ChevronDown, User, Settings, Key, LogOut, Sparkles } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
-const Topbar = ({ onToggleSidebar }) => {
+const Topbar = ({ onToggleSidebar, isMobile }) => {
   const { darkMode, toggleDarkMode } = useTheme();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -39,7 +39,7 @@ const Topbar = ({ onToggleSidebar }) => {
   const userInitial = userName.charAt(0).toUpperCase();
 
   return (
-    <div style={styles.topbar}>
+    <div style={{...styles.topbar, padding: isMobile ? '0 16px' : '0 28px'}}>
       <div style={styles.left}>
         <motion.button
           style={styles.menuBtn}
@@ -49,10 +49,24 @@ const Topbar = ({ onToggleSidebar }) => {
         >
           <Menu size={20} color="var(--text-secondary)" />
         </motion.button>
-        <div style={styles.searchWrap}>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => navigate('/dashboard')}>
+          <div style={styles.logoIconTop}>
+            <Sparkles size={18} color="#fff" />
+          </div>
+          {!isMobile && (
+            <div style={{ fontWeight: 700, fontSize: '18px', color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>
+              Nexa<span style={{ fontWeight: 800, background: 'linear-gradient(135deg, #6C63FF, #3B82F6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>BI</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={styles.center}>
+        <div style={{...styles.searchWrap, width: isMobile ? '100%' : '380px', maxWidth: '380px'}}>
           <Search size={18} color="var(--text-tertiary)" style={{ flexShrink: 0 }} />
-          <input type="text" placeholder="Search or ask anything..." style={styles.searchInput} />
-          <kbd style={styles.kbd}>⌘K</kbd>
+          <input type="text" placeholder={isMobile ? "Search..." : "Search or ask anything..."} style={styles.searchInput} />
+          {!isMobile && <kbd style={styles.kbd}>⌘K</kbd>}
         </div>
       </div>
 
@@ -80,7 +94,7 @@ const Topbar = ({ onToggleSidebar }) => {
           <AnimatePresence>
             {showNotifications && (
               <motion.div
-                style={styles.notifDropdown}
+                style={{...styles.notifDropdown, right: isMobile ? '-40px' : 0, width: isMobile ? '300px' : '340px'}}
                 initial={{ opacity: 0, y: -10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -10, scale: 0.95 }}
@@ -107,26 +121,30 @@ const Topbar = ({ onToggleSidebar }) => {
           </AnimatePresence>
         </div>
 
-        <div style={styles.divider} />
+        {!isMobile && <div style={styles.divider} />}
 
         <div style={{ position: 'relative' }} ref={profileRef}>
           <motion.div 
-            style={styles.userArea} 
+            style={{...styles.userArea, padding: isMobile ? '4px' : '6px 12px 6px 6px'}} 
             whileHover={{ backgroundColor: 'var(--hover-bg)' }}
             onClick={() => setShowProfile(!showProfile)}
           >
             <div style={styles.avatar}><span style={styles.avatarText}>{userInitial}</span></div>
-            <div style={styles.userInfo}>
-              <span style={styles.userName}>{userName}</span>
-              <span style={styles.userPlan}>Free Plan</span>
-            </div>
-            <ChevronDown size={16} color="var(--text-tertiary)" />
+            {!isMobile && (
+              <>
+                <div style={styles.userInfo}>
+                  <span style={styles.userName}>{userName}</span>
+                  <span style={styles.userPlan}>Free Plan</span>
+                </div>
+                <ChevronDown size={16} color="var(--text-tertiary)" />
+              </>
+            )}
           </motion.div>
 
           <AnimatePresence>
             {showProfile && (
               <motion.div
-                style={styles.profileDropdown}
+                style={{...styles.profileDropdown, right: isMobile ? '-10px' : 0}}
                 initial={{ opacity: 0, y: -10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -10, scale: 0.95 }}
@@ -173,21 +191,29 @@ const Topbar = ({ onToggleSidebar }) => {
 
 const styles = {
   topbar: {
-    position: 'fixed', top: 0, right: 0, left: 'var(--sidebar-width)',
+    position: 'fixed', top: 0, right: 0, left: 0, width: '100%',
     height: 'var(--topbar-height)', background: 'var(--topbar-bg)',
     backdropFilter: 'blur(12px)', borderBottom: '1px solid var(--border)',
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '0 28px', zIndex: 90, transition: 'left 0.3s ease, background 0.3s ease',
+    padding: '0 28px', zIndex: 110, transition: 'background 0.3s ease',
   },
-  left: { display: 'flex', alignItems: 'center', gap: '16px' },
+  left: { display: 'flex', alignItems: 'center', gap: '16px', flex: '0 0 auto' },
+  center: { display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '1 1 auto', padding: '0 16px', minWidth: 0 },
+  right: { display: 'flex', alignItems: 'center', gap: '8px', flex: '0 0 auto', justifyContent: 'flex-end' },
   menuBtn: {
     width: '38px', height: '38px', borderRadius: '10px', border: 'none',
     background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
   },
+  logoIconTop: {
+    width: '32px', height: '32px', borderRadius: '8px',
+    background: 'linear-gradient(135deg, #6C63FF 0%, #3B82F6 100%)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    boxShadow: '0 2px 8px rgba(108,99,255,0.3)',
+  },
   searchWrap: {
     display: 'flex', alignItems: 'center', gap: '10px',
     background: 'var(--input-bg)', borderRadius: '12px', padding: '10px 16px',
-    width: '380px', border: '1px solid var(--border)',
+    border: '1px solid var(--border)',
   },
   searchInput: { flex: 1, background: 'transparent', fontSize: '14px', color: 'var(--text-primary)' },
   kbd: {

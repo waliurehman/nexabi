@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, BarChart2, MessageSquare, Upload,
   FileText, Settings, Plus, Sparkles, Zap, ArrowUpRight,
@@ -17,123 +17,136 @@ const navItems = [
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
-const Sidebar = ({ collapsed }) => {
+const Sidebar = ({ collapsed, open, isMobile, onClose }) => {
   const location = useLocation();
 
+  const sidebarVariants = {
+    desktopOpen: { width: 260, x: 0 },
+    desktopClosed: { width: 80, x: 0 },
+    mobileOpen: { width: 260, x: 0 },
+    mobileClosed: { width: 260, x: '-100%' }
+  };
+
+  const getVariant = () => {
+    if (isMobile) return open ? 'mobileOpen' : 'mobileClosed';
+    return collapsed ? 'desktopClosed' : 'desktopOpen';
+  };
+
   return (
-    <motion.aside
-      style={{
-        ...styles.sidebar,
-        width: collapsed ? '80px' : 'var(--sidebar-width)',
-      }}
-      initial={false}
-      animate={{ width: collapsed ? 80 : 260 }}
-      transition={{ duration: 0.3, ease: 'easeInOut' }}
-    >
-      <div style={styles.logoArea}>
-        <div style={styles.logoIcon}>
-          <Sparkles size={22} color="#fff" />
-        </div>
-        {!collapsed && (
+    <>
+      <AnimatePresence>
+        {isMobile && open && (
           <motion.div
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.1 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            style={{
+              position: 'fixed', top: 'var(--topbar-height)', left: 0, right: 0, bottom: 0,
+              background: 'rgba(0,0,0,0.5)', zIndex: 90,
+              backdropFilter: 'blur(2px)'
+            }}
+            onClick={onClose}
+          />
+        )}
+      </AnimatePresence>
+
+      <motion.aside
+        style={styles.sidebar}
+        variants={sidebarVariants}
+        initial={false}
+        animate={getVariant()}
+        transition={{ duration: 0.3, ease: 'easeInOut' }}
+      >
+        {(!collapsed || isMobile) ? (
+          <motion.button
+            style={styles.newBtn}
+            whileHover={{ scale: 1.02, boxShadow: '0 6px 25px rgba(108,99,255,0.35)' }}
+            whileTap={{ scale: 0.98 }}
           >
-            <span style={styles.logoText}>Nexa</span>
-            <span style={styles.logoAI}>BI</span>
+            <Plus size={18} />
+            New Analysis
+          </motion.button>
+        ) : (
+          <motion.button
+            style={styles.newBtnSmall}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Plus size={20} />
+          </motion.button>
+        )}
+
+        <nav style={styles.nav}>
+          <div style={styles.menuLabel}>{(!collapsed || isMobile) && 'MENU'}</div>
+          {navItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            const Icon = item.icon;
+            return (
+              <NavLink key={item.path} to={item.path} style={{ textDecoration: 'none' }} onClick={isMobile ? onClose : undefined}>
+                <motion.div
+                  style={{
+                    ...styles.navItem,
+                    ...(isActive ? styles.navItemActive : {}),
+                    justifyContent: (!collapsed || isMobile) ? 'flex-start' : 'center',
+                    padding: (!collapsed || isMobile) ? '11px 16px' : '12px',
+                  }}
+                  whileHover={{
+                    backgroundColor: isActive ? undefined : 'var(--hover-bg)',
+                    x: isActive ? 0 : 2,
+                  }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <Icon size={20} style={{ color: isActive ? '#fff' : 'var(--text-secondary)', flexShrink: 0 }} />
+                  {(!collapsed || isMobile) && (
+                    <span style={{
+                      fontSize: '14px',
+                      whiteSpace: 'nowrap',
+                      color: isActive ? '#fff' : 'var(--text-secondary)',
+                      fontWeight: isActive ? 600 : 500,
+                    }}>
+                      {item.label}
+                    </span>
+                  )}
+                  {isActive && (!collapsed || isMobile) && <div style={styles.activeDot} />}
+                </motion.div>
+              </NavLink>
+            );
+          })}
+        </nav>
+
+        {(!collapsed || isMobile) && (
+          <motion.div
+            style={styles.upgradeCard}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <div style={styles.upgradeIconWrap}><Zap size={20} color="#fff" /></div>
+            <h4 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '6px' }}>Upgrade to Premium!</h4>
+            <p style={{ fontSize: '12px', opacity: 0.85, lineHeight: 1.5, marginBottom: '14px' }}>
+              Unlock unlimited queries and advanced analytics.
+            </p>
+            <motion.button
+              style={styles.upgradeBtn}
+              whileHover={{ scale: 1.03, backgroundColor: 'rgba(255,255,255,0.3)' }}
+              whileTap={{ scale: 0.97 }}
+            >
+              Upgrade Now <ArrowUpRight size={14} />
+            </motion.button>
           </motion.div>
         )}
-      </div>
-
-      {!collapsed ? (
-        <motion.button
-          style={styles.newBtn}
-          whileHover={{ scale: 1.02, boxShadow: '0 6px 25px rgba(108,99,255,0.35)' }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <Plus size={18} />
-          New Analysis
-        </motion.button>
-      ) : (
-        <motion.button
-          style={styles.newBtnSmall}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          <Plus size={20} />
-        </motion.button>
-      )}
-
-      <nav style={styles.nav}>
-        <div style={styles.menuLabel}>{!collapsed && 'MENU'}</div>
-        {navItems.map((item) => {
-          const isActive = location.pathname === item.path;
-          const Icon = item.icon;
-          return (
-            <NavLink key={item.path} to={item.path} style={{ textDecoration: 'none' }}>
-              <motion.div
-                style={{
-                  ...styles.navItem,
-                  ...(isActive ? styles.navItemActive : {}),
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  padding: collapsed ? '12px' : '11px 16px',
-                }}
-                whileHover={{
-                  backgroundColor: isActive ? undefined : 'var(--hover-bg)',
-                  x: isActive ? 0 : 2,
-                }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <Icon size={20} style={{ color: isActive ? '#fff' : 'var(--text-secondary)', flexShrink: 0 }} />
-                {!collapsed && (
-                  <span style={{
-                    fontSize: '14px',
-                    whiteSpace: 'nowrap',
-                    color: isActive ? '#fff' : 'var(--text-secondary)',
-                    fontWeight: isActive ? 600 : 500,
-                  }}>
-                    {item.label}
-                  </span>
-                )}
-                {isActive && !collapsed && <div style={styles.activeDot} />}
-              </motion.div>
-            </NavLink>
-          );
-        })}
-      </nav>
-
-      {!collapsed && (
-        <motion.div
-          style={styles.upgradeCard}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <div style={styles.upgradeIconWrap}><Zap size={20} color="#fff" /></div>
-          <h4 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '6px' }}>Upgrade to Premium!</h4>
-          <p style={{ fontSize: '12px', opacity: 0.85, lineHeight: 1.5, marginBottom: '14px' }}>
-            Unlock unlimited queries and advanced analytics.
-          </p>
-          <motion.button
-            style={styles.upgradeBtn}
-            whileHover={{ scale: 1.03, backgroundColor: 'rgba(255,255,255,0.3)' }}
-            whileTap={{ scale: 0.97 }}
-          >
-            Upgrade Now <ArrowUpRight size={14} />
-          </motion.button>
-        </motion.div>
-      )}
-    </motion.aside>
+      </motion.aside>
+    </>
   );
 };
 
 const styles = {
   sidebar: {
     position: 'fixed',
-    top: 0,
+    top: 'var(--topbar-height)',
     left: 0,
-    height: '100vh',
+    height: 'calc(100vh - var(--topbar-height))',
     background: 'var(--sidebar-bg)',
     borderRight: '1px solid var(--border)',
     display: 'flex',
@@ -141,30 +154,16 @@ const styles = {
     zIndex: 100,
     overflowX: 'hidden',
     overflowY: 'auto',
-    transition: 'background 0.3s ease',
-  },
-  logoArea: { display: 'flex', alignItems: 'center', gap: '12px', padding: '24px 20px 20px' },
-  logoIcon: {
-    width: '40px', height: '40px', borderRadius: '12px',
-    background: 'linear-gradient(135deg, #6C63FF 0%, #3B82F6 100%)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-    boxShadow: '0 4px 12px rgba(108,99,255,0.3)',
-  },
-  logoText: { fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em' },
-  logoAI: {
-    fontSize: '20px', fontWeight: 800, marginLeft: '4px',
-    background: 'linear-gradient(135deg, #6C63FF, #3B82F6)',
-    WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
   },
   newBtn: {
-    margin: '4px 20px 8px', padding: '12px 20px',
+    margin: '24px 20px 8px', padding: '12px 20px',
     background: 'linear-gradient(135deg, #6C63FF 0%, #3B82F6 100%)',
     color: '#fff', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: 600,
     display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer',
     boxShadow: '0 4px 16px rgba(108,99,255,0.3)', justifyContent: 'center',
   },
   newBtnSmall: {
-    margin: '4px auto 8px', width: '44px', height: '44px',
+    margin: '24px auto 8px', width: '44px', height: '44px',
     background: 'linear-gradient(135deg, #6C63FF 0%, #3B82F6 100%)',
     color: '#fff', border: 'none', borderRadius: '12px',
     display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
