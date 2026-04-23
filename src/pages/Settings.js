@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Key, Link2, CreditCard, Camera, Eye, EyeOff, Copy, CheckCircle, Plus, Shield, Zap, Crown, ArrowUpRight, Database, BarChart2, Settings as SettingsIcon, Globe, Bell, Lock, Palette } from 'lucide-react';
+import API_URL from '../api/config';
+import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 const pageV = { initial:{opacity:0,y:16}, animate:{opacity:1,y:0,transition:{duration:0.4}}, exit:{opacity:0,y:-10} };
 const tabs = [
@@ -9,13 +12,104 @@ const tabs = [
 ];
 
 const Settings = () => {
+  const { token } = useAuth();
+  const { darkMode, toggleDarkMode } = useTheme();
   const [activeTab,setActiveTab] = useState('profile');
   const [showApiKey,setShowApiKey] = useState(false);
   const [showPBKey,setShowPBKey] = useState(false);
   const [copied,setCopied] = useState(false);
   const copyKey = (t) => { navigator.clipboard?.writeText(t); setCopied(true); setTimeout(()=>setCopied(false),2000); };
   const [toggles,setToggles] = useState({notifications:true,autoProcess:true,darkMode:false,twoFactor:false,analytics:true,marketing:false});
-  const toggleSwitch = k => setToggles(p=>({...p,[k]:!p[k]}));
+  const [profileForm, setProfileForm] = useState({ name: '', email: '', role: '', company: '' });
+  const [profileStatus, setProfileStatus] = useState({ type: '', message: '' });
+  const [keyForm, setKeyForm] = useState({ groq_key: '', gemini_key: '' });
+  const [keyStatus, setKeyStatus] = useState({ type: '', message: '' });
+  const toggleSwitch = k => {
+    if (k === 'darkMode') {
+      toggleDarkMode();
+      setToggles(p => ({...p, darkMode: !p.darkMode}));
+      return;
+    }
+    setToggles(p => ({...p,[k]:!p[k]}));
+  };
+
+  useEffect(() => {
+    setToggles(p => ({ ...p, darkMode }));
+  }, [darkMode]);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!token) return;
+      try {
+        const response = await fetch(`${API_URL}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!response.ok) {
+          throw new Error('Failed to load profile');
+        }
+        const data = await response.json();
+        setProfileForm({
+          name: data?.name || '',
+          email: data?.email || '',
+          role: data?.role || '',
+          company: data?.company || ''
+        });
+      } catch (err) {
+        setProfileStatus({ type: 'error', message: 'Unable to load profile data.' });
+      }
+    };
+    fetchProfile();
+  }, [token]);
+
+  const handleProfileSave = async () => {
+    if (!token) return;
+    setProfileStatus({ type: '', message: '' });
+    try {
+      const response = await fetch(`${API_URL}/auth/update`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: profileForm.name,
+          email: profileForm.email,
+          role: profileForm.role,
+          company: profileForm.company
+        })
+      });
+      if (!response.ok) {
+        throw new Error('Failed to save profile');
+      }
+      setProfileStatus({ type: 'success', message: 'Profile updated successfully.' });
+    } catch (err) {
+      setProfileStatus({ type: 'error', message: 'Failed to update profile.' });
+    }
+  };
+
+  const handleKeysSave = async () => {
+    if (!token) return;
+    setKeyStatus({ type: '', message: '' });
+    try {
+      const response = await fetch(`${API_URL}/auth/update-keys`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          groq_key: keyForm.groq_key,
+          gemini_key: keyForm.gemini_key
+        })
+      });
+      if (!response.ok) {
+        throw new Error('Failed to save keys');
+      }
+      setKeyStatus({ type: 'success', message: 'Saved!' });
+    } catch (err) {
+      setKeyStatus({ type: 'error', message: 'Failed to save API keys.' });
+    }
+  };
 
   const Toggle = ({checked,onChange}) => (
     <motion.div style={{...S.toggle,background:checked?'linear-gradient(135deg,#6C63FF,#3B82F6)':'var(--border)'}} onClick={onChange} whileTap={{scale:0.95}}>
@@ -63,13 +157,18 @@ const Settings = () => {
                   </div>
                 </div>
                 <div className="form-grid">
-                  <div style={S.formGroup}><label style={S.label}>Full Name</label><input type="text" defaultValue="WUR" style={S.input}/></div>
-                  <div style={S.formGroup}><label style={S.label}>Email Address</label><input type="email" defaultValue="wur@nexabi.io" style={S.input}/></div>
-                  <div style={S.formGroup}><label style={S.label}>Role</label><input type="text" defaultValue="Data Analyst" style={S.input}/></div>
-                  <div style={S.formGroup}><label style={S.label}>Company</label><input type="text" defaultValue="TechCorp Inc." style={S.input}/></div>
+                  <div style={S.formGroup}><label style={S.label}>Full Name</label><input type="text" value={profileForm.name} onChange={(e) => setProfileForm(p => ({ ...p, name: e.target.value }))} style={S.input}/></div>
+                  <div style={S.formGroup}><label style={S.label}>Email Address</label><input type="email" value={profileForm.email} onChange={(e) => setProfileForm(p => ({ ...p, email: e.target.value }))} style={S.input}/></div>
+                  <div style={S.formGroup}><label style={S.label}>Role</label><input type="text" value={profileForm.role} onChange={(e) => setProfileForm(p => ({ ...p, role: e.target.value }))} style={S.input}/></div>
+                  <div style={S.formGroup}><label style={S.label}>Company</label><input type="text" value={profileForm.company} onChange={(e) => setProfileForm(p => ({ ...p, company: e.target.value }))} style={S.input}/></div>
                 </div>
+                {profileStatus.message && (
+                  <div style={{ fontSize: '12px', color: profileStatus.type === 'success' ? 'var(--success)' : 'var(--danger)', marginTop: '10px' }}>
+                    {profileStatus.message}
+                  </div>
+                )}
                 <div style={S.formActions}>
-                  <motion.button style={S.saveBtn} whileHover={{scale:1.03}} whileTap={{scale:0.97}}>Save Changes</motion.button>
+                  <motion.button style={S.saveBtn} whileHover={{scale:1.03}} whileTap={{scale:0.97}} onClick={handleProfileSave}>Save Changes</motion.button>
                   <button style={S.cancelBtn}>Cancel</button>
                 </div>
               </div>
@@ -132,33 +231,36 @@ const Settings = () => {
           {activeTab==='integrations'&&(
             <motion.div key="integrations" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-8}} transition={{duration:0.3}}>
               <div className="int-grid">
-                {[
-                  {name:'Power BI',desc:'Import reports and dashboards',status:'Connected',icon:BarChart2,color:'#F59E0B'},
-                  {name:'PostgreSQL',desc:'Connect to your databases',status:'Connected',icon:Database,color:'#3B82F6'},
-                  {name:'MongoDB',desc:'Query MongoDB collections with AI',status:'Not connected',icon:Database,color:'#10B981'},
-                  {name:'Slack',desc:'Send AI insights to Slack',status:'Not connected',icon:Globe,color:'#6C63FF'},
-                ].map((int,i)=>{const I=int.icon;const c=int.status==='Connected';return(
-                  <motion.div key={int.name} style={S.intCard} initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} transition={{delay:i*0.1}} whileHover={{y:-2,boxShadow:'var(--shadow-md)'}}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'14px'}}>
-                      <div style={{width:'50px',height:'50px',borderRadius:'14px',background:`${int.color}15`,display:'flex',alignItems:'center',justifyContent:'center'}}><I size={24} color={int.color}/></div>
-                      <span style={{display:'flex',alignItems:'center',gap:'5px',fontSize:'11px',fontWeight:600,padding:'4px 10px',borderRadius:'6px',color:c?'var(--success)':'var(--text-tertiary)',background:c?'rgba(16,185,129,0.1)':'rgba(156,163,175,0.1)'}}>
-                        {c&&<CheckCircle size={12}/>}{int.status}
-                      </span>
+                <h3 style={S.cardTitle}>Groq API Key</h3>
+                <p style={S.cardDesc}>Required for AI-powered queries and document analysis</p>
+                <div style={S.apiKeyWrap}>
+                  <Key size={16} color="var(--text-tertiary)"/>
+                  <input type={showApiKey?'text':'password'} value={keyForm.groq_key} onChange={(e) => setKeyForm(p => ({ ...p, groq_key: e.target.value }))} style={S.apiInput}/>
+                  <motion.button style={S.apiBtn} onClick={()=>setShowApiKey(!showApiKey)} whileTap={{scale:0.9}}>
+                    {showApiKey?<EyeOff size={16}/>:<Eye size={16}/>}
+                  </motion.button>
+                  <motion.button style={S.apiBtn} onClick={()=>copyKey(keyForm.groq_key)} whileTap={{scale:0.9}}>
+                    {copied?<CheckCircle size={16} color="var(--success)"/>:<Copy size={16}/>}
+                  </motion.button>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:'8px',fontSize:'12px',color:'var(--text-tertiary)',marginTop:'12px'}}><Shield size={14} color="var(--success)"/>Your API key is encrypted and stored securely</div>
                     </div>
                     <h4 style={{fontSize:'16px',fontWeight:700,color:'var(--text-primary)',marginBottom:'4px'}}>{int.name}</h4>
-                    <p style={{fontSize:'13px',color:'var(--text-tertiary)',marginBottom:'18px',lineHeight:1.5}}>{int.desc}</p>
-                    <motion.button style={{width:'100%',padding:'10px',borderRadius:'10px',border:'none',fontSize:'13px',fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',
+                <h3 style={S.cardTitle}>Gemini API Key</h3>
+                <p style={S.cardDesc}>Optional backup model for AI responses</p>
                       background:c?'var(--input-bg)':'linear-gradient(135deg,#6C63FF,#3B82F6)',color:c?'var(--text-secondary)':'#fff',boxShadow:c?'none':'0 4px 12px rgba(108,99,255,0.25)'}} whileHover={{scale:1.02}}>
-                      {c?<><SettingsIcon size={14}/>Manage</>:<><Plus size={14}/>Connect</>}
-                    </motion.button>
-                  </motion.div>
-                );})}
-              </div>
-              <div style={S.card}>
+                  <div style={S.formGroup}><label style={S.label}>Gemini API Key</label>
+                    <div style={S.apiKeyWrap}><input type={showPBKey?'text':'password'} value={keyForm.gemini_key} onChange={(e) => setKeyForm(p => ({ ...p, gemini_key: e.target.value }))} style={{...S.apiInput,padding:0}}/><motion.button style={S.apiBtn} onClick={()=>setShowPBKey(!showPBKey)} whileTap={{scale:0.9}}>{showPBKey?<EyeOff size={16}/>:<Eye size={16}/>}</motion.button></div>
+                  </div>
                 <h3 style={S.cardTitle}>Feature Toggles</h3>
+                {keyStatus.message && (
+                  <div style={{ fontSize: '12px', color: keyStatus.type === 'success' ? 'var(--success)' : 'var(--danger)', marginTop: '10px' }}>
+                    {keyStatus.message}
+                  </div>
+                )}
                 <div style={S.toggleList}>
-                  {[{key:'analytics',label:'Advanced Analytics',desc:'Enable detailed query and usage analytics'},{key:'marketing',label:'Usage Reports',desc:'Send weekly usage reports via email'}].map(item=>(
-                    <div key={item.key} style={S.toggleItem}>
+                  <motion.button style={S.saveBtn} whileHover={{scale:1.03}} whileTap={{scale:0.97}} onClick={handleKeysSave}>Save Credentials</motion.button>
+                  <button style={S.cancelBtn}>Test Connection</button>
                       <div style={{flex:1}}><p style={S.toggleLabel}>{item.label}</p><p style={S.toggleDesc}>{item.desc}</p></div>
                       <Toggle checked={toggles[item.key]} onChange={()=>toggleSwitch(item.key)}/>
                     </div>
