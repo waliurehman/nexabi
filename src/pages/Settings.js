@@ -62,18 +62,21 @@ const Settings = () => {
   }, [token]);
 
   const handleProfileSave = async () => {
-    if (!token) return;
+    const authToken = token || localStorage.getItem('nexabi_token');
+    console.log('Settings Save Changes clicked');
+    console.log('Calling endpoint:', `${API_URL}/auth/update`);
+    console.log('Using token:', authToken ? `${authToken.slice(0, 8)}...` : 'missing');
+    if (!authToken) return;
     setProfileStatus({ type: '', message: '' });
     try {
       const response = await fetch(`${API_URL}/auth/update`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${authToken}`
         },
         body: JSON.stringify({
           name: profileForm.name,
-          email: profileForm.email,
           role: profileForm.role,
           company: profileForm.company
         })
