@@ -1,8 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, AreaChart, Area, ScatterChart, Scatter, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Maximize2, Download, Image as ImageIcon, Plus, Trash2, Settings2, Database, Sparkles, Share2, LayoutDashboard, Copy, CheckCircle, BarChart as BarChartIcon, LineChart as LineChartIcon, PieChart as PieChartIcon } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import { useAuth } from '../context/AuthContext';
+import { getDatasets, getDatasetById } from '../api/files';
+import { askQuery } from '../api/queries';
 
 const pageV = { initial: { opacity: 0 }, animate: { opacity: 1, transition: { duration: 0.4 } }, exit: { opacity: 0 } };
 
@@ -37,6 +40,7 @@ Return ONLY valid JSON in this format, and absolutely nothing else:
 Ensure the data matches the user's prompt (e.g. 6 months, 4 categories, etc). Do NOT wrap the JSON in markdown code blocks, just raw JSON text.`;
 
 const ChartBuilder = () => {
+  const { token } = useAuth();
   const [chartType, setChartType] = useState('bar');
   const [theme, setTheme] = useState(THEMES[0]);
   const [title, setTitle] = useState('Sample Chart Overview');
@@ -54,8 +58,72 @@ const ChartBuilder = () => {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
 
+  const [datasets, setDatasets] = useState([]);
+  const [selectedDatasetId, setSelectedDatasetId] = useState('');
+  const [datasetDetail, setDatasetDetail] = useState(null);
+  const [isDatasetLoading, setIsDatasetLoading] = useState(false);
+  const [xKey, setXKey] = useState('name');
+  const [yKey, setYKey] = useState('value');
+
   const [isFullscreen, setIsFullscreen] = useState(false);
   const chartRef = useRef(null);
+
+  useEffect(() => {
+    const fetchDatasets = async () => {
+      if (!token) return;
+      try {
+        const dataSets = await getDatasets(token);
+        setDatasets(dataSets || []);
+      } catch (err) {
+        console.error('Failed to fetch datasets:', err);
+      }
+    };
+    fetchDatasets();
+  }, [token]);
+
+  useEffect(() => {
+    const loadDataset = async () => {
+      if (!selectedDatasetId) {
+        setDatasetDetail(null);
+        return;
+      }
+      if (!token) return;
+      setIsDatasetLoading(true);
+      try {
+        const detail = await getDatasetById(selectedDatasetId, token);
+        setDatasetDetail(detail);
+        const previewRows = detail?.preview || detail?.sample_data || detail?.data_preview || [];
+        if (previewRows.length > 0) {
+          setData(previewRows);
+          const columns = Object.keys(previewRows[0]);
+          const nextX = columns[0] || 'name';
+          const nextY = columns.find((col, idx) => idx > 0) || columns[0] || 'value';
+          setXKey(nextX);
+          setYKey(nextY);
+          setXAxisLabel(nextX);
+          setYAxisLabel(nextY);
+          setCsvInput(buildCsv(previewRows));
+        }
+      } catch (err) {
+        console.error('Failed to load dataset detail:', err);
+      } finally {
+        setIsDatasetLoading(false);
+      }
+    };
+    loadDataset();
+  }, [selectedDatasetId, token]);
+
+  useEffect(() => {
+    if (!data || data.length === 0) return;
+    const keys = Object.keys(data[0] || {});
+    if (keys.length === 0) return;
+    if (!keys.includes(xKey)) {
+      setXKey(keys[0]);
+    }
+    if (!keys.includes(yKey)) {
+      setYKey(keys[1] || keys[0]);
+    }
+  }, [data, xKey, yKey]);
 
   const handleDownloadPng = async () => {
     if (chartRef.current) {
@@ -79,48 +147,125 @@ const ChartBuilder = () => {
         });
         return obj;
       });
-      if (parsedData.length > 0) setData(parsedData);
+      if (parsedData.length > 0) {
+        setData(parsedData);
+        const nextX = headers[0] || 'name';
+        const nextY = headers[1] || headers[0] || 'value';
+        setXKey(nextX);
+        setYKey(nextY);
+        setXAxisLabel(nextX);
+        setYAxisLabel(nextY);
+      }
     } catch (e) {
       alert("Invalid CSV format. Please ensure header row and comma separation.");
     }
   };
 
-  const handleAiGenerate = async () => {
-    const apiKey = process.env.REACT_APP_GROQ_API_KEY;
-    if (!apiKey) {
-      setAiError("Groq API Key is not configured. Please add REACT_APP_GROQ_API_KEY to your .env file.");
-      return;
+  const buildCsv = (rows) => {
+    if (!rows || rows.length === 0) return '';
+    const headers = Object.keys(rows[0]);
+    const lines = [headers.join(',')];
+    rows.forEach(row => {
+      lines.push(headers.map(h => row[h]).join(','));
+    });
+    return lines.join('\n');
+  };
+
+  const parseJsonLike = (raw) => {
+    if (!raw || typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    try {
+      const parsed = JSON.parse(trimmed);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (err) {
+      const normalized = trimmed
+        .replace(/'/g, '"')
+        .replace(/\b([A-Za-z_][A-Za-z0-9_]*)\s*:/g, '"$1":');
+      try {
+        const parsed = JSON.parse(normalized);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+      } catch (innerErr) {
+        return null;
+      }
     }
+  };
+
+  const extractChartData = (aiResponse) => {
+    if (!aiResponse) return null;
+    const match = aiResponse.match(/\{\s*CHART_DATA\s*:\s*(\{[\s\S]*?\})\s*\}/);
+    if (match) {
+      return parseJsonLike(match[1]);
+    }
+    const jsonBlock = aiResponse.match(/```json\s*([\s\S]*?)\s*```/i);
+    if (jsonBlock) {
+      const parsed = parseJsonLike(jsonBlock[1]);
+      if (parsed?.CHART_DATA) return parsed.CHART_DATA;
+      return parsed;
+    }
+    return null;
+  };
+
+  const handleAiGenerate = async () => {
     if (!aiPrompt) return;
 
     setIsAiLoading(true);
     setAiError('');
     try {
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: aiPrompt }
-          ],
-          max_tokens: 1024,
-        })
-      });
-      
-      const resData = await response.json();
-      let text = resData.choices[0]?.message?.content || '';
-      
-      // Clean up markdown quotes if model ignored instructions
-      text = text.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim();
-      
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        setData(parsed);
-        setAiPrompt('');
+      if (token) {
+        const apiKey = localStorage.getItem('groq_key') || process.env.REACT_APP_GROQ_API_KEY;
+        const result = await askQuery(aiPrompt, apiKey || null, selectedDatasetId || null, token, 'groq', []);
+        const aiResponse = result?.response || '';
+        const chartData = extractChartData(aiResponse);
+        if (chartData?.data && Array.isArray(chartData.data)) {
+          setData(chartData.data);
+          if (chartData.type && CHART_TYPES.some(t => t.id === chartData.type)) {
+            setChartType(chartData.type);
+          }
+          if (chartData.title) setTitle(chartData.title);
+          if (chartData.xKey) {
+            setXKey(chartData.xKey);
+            setXAxisLabel(chartData.xKey);
+          }
+          if (chartData.yKey) {
+            setYKey(chartData.yKey);
+            setYAxisLabel(chartData.yKey);
+          }
+          setAiPrompt('');
+        } else {
+          throw new Error('Invalid AI response format');
+        }
       } else {
-        throw new Error("Invalid response format");
+        const apiKey = process.env.REACT_APP_GROQ_API_KEY;
+        if (!apiKey) {
+          setAiError("Groq API Key is not configured. Please add REACT_APP_GROQ_API_KEY to your .env file.");
+          return;
+        }
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'user', content: aiPrompt }
+            ],
+            max_tokens: 1024,
+          })
+        });
+        
+        const resData = await response.json();
+        let text = resData.choices[0]?.message?.content || '';
+        
+        // Clean up markdown quotes if model ignored instructions
+        text = text.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim();
+        
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setData(parsed);
+          setAiPrompt('');
+        } else {
+          throw new Error("Invalid response format");
+        }
       }
     } catch (err) {
       console.error(err);
@@ -137,22 +282,26 @@ const ChartBuilder = () => {
   };
 
   const handleAddRow = () => {
-    setData([...data, { name: `Item ${data.length + 1}`, value: 0, value2: 0 }]);
+    const nextX = xKey || 'name';
+    const nextY = yKey || 'value';
+    setData([...data, { [nextX]: `Item ${data.length + 1}`, [nextY]: 0 }]);
   };
 
   const handleDeleteRow = (index) => {
     setData(data.filter((_, i) => i !== index));
   };
 
-  // Dynamically get data keys (excluding the first one which is usually string 'name')
-  const dataKeys = Object.keys(data[0] || {}).filter(k => k !== 'name');
+  const dataKeys = (data[0] && yKey && Object.prototype.hasOwnProperty.call(data[0], yKey))
+    ? [yKey]
+    : Object.keys(data[0] || {}).filter(k => k !== xKey);
+  const primaryYKey = dataKeys[0] || yKey || 'value';
 
   const renderChart = () => {
     if (!data || !data.length) return <div>No data</div>;
     
     const commonProps = { data, margin: { top: 20, right: 30, left: 20, bottom: 20 } };
     
-    const XAx = () => <XAxis dataKey="name" stroke="var(--chart-text)" tick={{fontSize:12,fill:'var(--chart-text)'}} label={{ value: xAxisLabel, position: 'insideBottom', offset: -10, fill: 'var(--text-secondary)', fontSize: 13 }} />;
+    const XAx = () => <XAxis dataKey={xKey} stroke="var(--chart-text)" tick={{fontSize:12,fill:'var(--chart-text)'}} label={{ value: xAxisLabel, position: 'insideBottom', offset: -10, fill: 'var(--text-secondary)', fontSize: 13 }} />;
     const YAx = () => <YAxis stroke="var(--chart-text)" tick={{fontSize:12,fill:'var(--chart-text)'}} label={{ value: yAxisLabel, angle: -90, position: 'insideLeft', offset: 0, fill: 'var(--text-secondary)', fontSize: 13 }} />;
     const Tooltip = () => showTooltip ? <RechartsTooltip contentStyle={{background:'var(--tooltip-bg)', border:'1px solid var(--tooltip-border)', borderRadius:'8px', color: 'var(--text-primary)'}} /> : null;
     const Grid = () => showGrid ? <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} /> : null;
@@ -185,7 +334,7 @@ const ChartBuilder = () => {
       chartEl = (
         <PieChart>
           <Tooltip /> <Lgnd />
-          <Pie data={data} cx="50%" cy="50%" innerRadius={chartType === 'donut' ? 60 : 0} outerRadius={100} dataKey={dataKeys[0]} nameKey="name" paddingAngle={chartType === 'donut' ? 5 : 0}>
+          <Pie data={data} cx="50%" cy="50%" innerRadius={chartType === 'donut' ? 60 : 0} outerRadius={100} dataKey={primaryYKey} nameKey={xKey} paddingAngle={chartType === 'donut' ? 5 : 0}>
             {data.map((_, index) => <Cell key={`cell-${index}`} fill={theme.colors[index % theme.colors.length]} />)}
           </Pie>
         </PieChart>
@@ -194,8 +343,8 @@ const ChartBuilder = () => {
       chartEl = (
         <ScatterChart {...commonProps}>
           <Grid />
-          <XAxis type="category" dataKey="name" name="Name" stroke="var(--chart-text)" />
-          <YAxis type="number" dataKey={dataKeys[0]} name={yAxisLabel} stroke="var(--chart-text)" />
+          <XAxis type="category" dataKey={xKey} name={xAxisLabel} stroke="var(--chart-text)" />
+          <YAxis type="number" dataKey={primaryYKey} name={yAxisLabel} stroke="var(--chart-text)" />
           <Tooltip cursor={{ strokeDasharray: '3 3' }} /> <Lgnd />
           {dataKeys.map((k, i) => <Scatter key={k} name={k} data={data} fill={theme.colors[i % theme.colors.length]} />)}
         </ScatterChart>
@@ -213,7 +362,19 @@ const ChartBuilder = () => {
     <motion.div style={S.page} variants={pageV} initial="initial" animate="animate" exit="exit">
       
       <div style={S.header}>
-        <div><h1 style={S.title}>Chart Builder</h1><p style={S.subtitle}>Design, customize, and export stunning visualizations</p></div>
+        <div>
+          <h1 style={S.title}>Chart Builder</h1>
+          <p style={S.subtitle}>Design, customize, and export stunning visualizations</p>
+          <div style={S.datasetRow}>
+            <select value={selectedDatasetId} onChange={(e) => setSelectedDatasetId(e.target.value)} style={S.selectInput}>
+              <option value="">Select Dataset</option>
+              {datasets.map(ds => (
+                <option key={ds.id} value={ds.id}>{ds.name || ds.filename || 'Dataset'}</option>
+              ))}
+            </select>
+            {isDatasetLoading && <span style={S.datasetHint}>Loading dataset...</span>}
+          </div>
+        </div>
         <div style={{display:'flex', gap:'10px'}}>
           <motion.button style={S.btnSecondary} whileHover={{scale:1.02}}><Share2 size={16}/> Share</motion.button>
           <motion.button style={S.btnPrimary} whileHover={{scale:1.02}}><LayoutDashboard size={16}/> Add to Dashboard</motion.button>
@@ -263,6 +424,27 @@ const ChartBuilder = () => {
               <input type="text" value={yAxisLabel} onChange={(e)=>setYAxisLabel(e.target.value)} style={S.input} />
             </div>
           </div>
+
+          {datasetDetail && (
+            <div style={{display:'flex', gap:'10px', marginBottom:'20px'}}>
+              <div style={{flex:1}}>
+                <label style={S.label}>X-Axis Column</label>
+                <select value={xKey} onChange={(e) => setXKey(e.target.value)} style={S.selectInput}>
+                  {Object.keys(datasetDetail.columns || (data[0] || {})).map(col => (
+                    <option key={col} value={col}>{col}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{flex:1}}>
+                <label style={S.label}>Y-Axis Column</label>
+                <select value={yKey} onChange={(e) => setYKey(e.target.value)} style={S.selectInput}>
+                  {Object.keys(datasetDetail.columns || (data[0] || {})).map(col => (
+                    <option key={col} value={col}>{col}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
 
           <div style={S.section}>
             <label style={S.label}>Toggles</label>
@@ -314,14 +496,12 @@ const ChartBuilder = () => {
             {activeTab === 'manual' && (
               <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
                 <div style={{display:'grid', gridTemplateColumns:'1fr 1fr auto', gap:'8px', fontWeight:600, fontSize:'12px', color:'var(--text-tertiary)', padding:'0 5px'}}>
-                  <span>Name (X)</span><span>Value 1 (Y)</span><span></span>
+                  <span>{xKey || 'Name'} (X)</span><span>{yKey || 'Value'} (Y)</span><span></span>
                 </div>
                 {data.map((row, i) => (
                   <div key={i} style={{display:'grid', gridTemplateColumns:'1fr 1fr auto', gap:'8px'}}>
-                    <input type="text" value={row.name} onChange={(e)=>handleUpdateManualData(i, 'name', e.target.value)} style={S.tableInput}/>
-                    {dataKeys.slice(0,1).map(k => (
-                      <input key={k} type="text" value={row[k]} onChange={(e)=>handleUpdateManualData(i, k, e.target.value)} style={S.tableInput}/>
-                    ))}
+                    <input type="text" value={row[xKey] ?? ''} onChange={(e)=>handleUpdateManualData(i, xKey, e.target.value)} style={S.tableInput}/>
+                    <input type="text" value={row[yKey] ?? ''} onChange={(e)=>handleUpdateManualData(i, yKey, e.target.value)} style={S.tableInput}/>
                     <button style={S.iconBtn} onClick={()=>handleDeleteRow(i)}><Trash2 size={14} color="var(--danger)"/></button>
                   </div>
                 ))}
@@ -344,7 +524,7 @@ const ChartBuilder = () => {
               <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
                 <div style={S.aiAlert}>
                   <Sparkles size={16} color="var(--primary)" />
-                  Generate dummy data with Groq AI.
+                  Generate chart data from your selected dataset.
                 </div>
                 <textarea 
                   placeholder="e.g. Generate 5 months of marketing spend data" 
