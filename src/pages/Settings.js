@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Key, Link2, CreditCard, Camera, Eye, EyeOff, Copy, CheckCircle, Plus, Shield, Zap, Crown, ArrowUpRight, Database, BarChart2, Settings as SettingsIcon, Globe, Bell, Lock, Palette } from 'lucide-react';
-import API_URL from '../api/config';
-import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
 const pageV = { initial:{opacity:0,y:16}, animate:{opacity:1,y:0,transition:{duration:0.4}}, exit:{opacity:0,y:-10} };
@@ -12,7 +10,6 @@ const tabs = [
 ];
 
 const Settings = () => {
-  const { token } = useAuth();
   const { darkMode, toggleDarkMode } = useTheme();
   const [activeTab,setActiveTab] = useState('profile');
   const [showApiKey,setShowApiKey] = useState(false);
@@ -39,11 +36,13 @@ const Settings = () => {
 
   useEffect(() => {
     const fetchProfile = async () => {
+      const token = localStorage.getItem('nexabi_token');
       if (!token) return;
       try {
-        const response = await fetch(`${API_URL}/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const response = await fetch(
+          'https://nexabi-backend-production.up.railway.app/api/auth/me',
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
         if (!response.ok) {
           throw new Error('Failed to load profile');
         }
@@ -59,21 +58,20 @@ const Settings = () => {
       }
     };
     fetchProfile();
-  }, [token]);
+  }, []);
 
   const handleProfileSave = async () => {
-    const authToken = token || localStorage.getItem('nexabi_token');
-    console.log('Settings Save Changes clicked');
-    console.log('Calling endpoint:', `${API_URL}/auth/update`);
-    console.log('Using token:', authToken ? `${authToken.slice(0, 8)}...` : 'missing');
-    if (!authToken) return;
+    const token = localStorage.getItem('nexabi_token');
+    if (!token) return;
     setProfileStatus({ type: '', message: '' });
     try {
-      const response = await fetch(`${API_URL}/auth/update`, {
+      const response = await fetch(
+        'https://nexabi-backend-production.up.railway.app/api/auth/update',
+        {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`
+          Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({
           name: profileForm.name,
@@ -84,17 +82,18 @@ const Settings = () => {
       if (!response.ok) {
         throw new Error('Failed to save profile');
       }
-      setProfileStatus({ type: 'success', message: 'Profile updated successfully.' });
+      setProfileStatus({ type: 'success', message: 'Saved!' });
     } catch (err) {
       setProfileStatus({ type: 'error', message: 'Failed to update profile.' });
     }
   };
 
   const handleKeysSave = async () => {
+    const token = localStorage.getItem('nexabi_token');
     if (!token) return;
     setKeyStatus({ type: '', message: '' });
     try {
-      const response = await fetch(`${API_URL}/auth/update-keys`, {
+      const response = await fetch('https://nexabi-backend-production.up.railway.app/api/auth/update-keys', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
