@@ -61,33 +61,31 @@ const Settings = () => {
   }, []);
 
   const handleProfileSave = async () => {
-    console.log("Save button clicked");
     const token = localStorage.getItem('nexabi_token');
-    console.log("Token:", token ? "exists" : "missing");
     if (!token) return;
     setProfileStatus({ type: '', message: '' });
     try {
       const response = await fetch(
         'https://nexabi-backend-production.up.railway.app/api/auth/update',
         {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          name: profileForm.name,
-          role: profileForm.role,
-          company: profileForm.company
-        })
-      });
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            name: profileForm.name,
+            role: profileForm.role,
+            company: profileForm.company
+          })
+        }
+      );
       if (!response.ok) {
         throw new Error('Failed to save profile');
       }
-      alert('Saved!');
-      setProfileStatus({ type: 'success', message: 'Saved!' });
+      setProfileStatus({ type: 'success', message: 'Profile saved!' });
     } catch (err) {
-      setProfileStatus({ type: 'error', message: 'Failed to update profile.' });
+      setProfileStatus({ type: 'error', message: 'Failed to save profile.' });
     }
   };
 
@@ -235,41 +233,56 @@ const Settings = () => {
 
           {activeTab==='integrations'&&(
             <motion.div key="integrations" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-8}} transition={{duration:0.3}}>
-              <div className="int-grid">
-                <h3 style={S.cardTitle}>Groq API Key</h3>
-                <p style={S.cardDesc}>Required for AI-powered queries and document analysis</p>
-                <div style={S.apiKeyWrap}>
-                  <Key size={16} color="var(--text-tertiary)"/>
-                  <input type={showApiKey?'text':'password'} value={keyForm.groq_key} onChange={(e) => setKeyForm(p => ({ ...p, groq_key: e.target.value }))} style={S.apiInput}/>
-                  <motion.button style={S.apiBtn} onClick={()=>setShowApiKey(!showApiKey)} whileTap={{scale:0.9}}>
-                    {showApiKey?<EyeOff size={16}/>:<Eye size={16}/>}
-                  </motion.button>
-                  <motion.button style={S.apiBtn} onClick={()=>copyKey(keyForm.groq_key)} whileTap={{scale:0.9}}>
-                    {copied?<CheckCircle size={16} color="var(--success)"/>:<Copy size={16}/>}
-                  </motion.button>
-                </div>
-                <div style={{display:'flex',alignItems:'center',gap:'8px',fontSize:'12px',color:'var(--text-tertiary)',marginTop:'12px'}}><Shield size={14} color="var(--success)"/>Your API key is encrypted and stored securely</div>
-                    </div>
-                    <h4 style={{fontSize:'16px',fontWeight:700,color:'var(--text-primary)',marginBottom:'4px'}}>{int.name}</h4>
-                <h3 style={S.cardTitle}>Gemini API Key</h3>
-                <p style={S.cardDesc}>Optional backup model for AI responses</p>
-                      background:c?'var(--input-bg)':'linear-gradient(135deg,#6C63FF,#3B82F6)',color:c?'var(--text-secondary)':'#fff',boxShadow:c?'none':'0 4px 12px rgba(108,99,255,0.25)'}} whileHover={{scale:1.02}}>
-                  <div style={S.formGroup}><label style={S.label}>Gemini API Key</label>
-                    <div style={S.apiKeyWrap}><input type={showPBKey?'text':'password'} value={keyForm.gemini_key} onChange={(e) => setKeyForm(p => ({ ...p, gemini_key: e.target.value }))} style={{...S.apiInput,padding:0}}/><motion.button style={S.apiBtn} onClick={()=>setShowPBKey(!showPBKey)} whileTap={{scale:0.9}}>{showPBKey?<EyeOff size={16}/>:<Eye size={16}/>}</motion.button></div>
+              <div style={S.card}>
+                <h3 style={S.cardTitle}>API Keys</h3>
+                <p style={S.cardDesc}>Manage your AI service credentials</p>
+                <div style={S.formGroup}>
+                  <label style={S.label}>Groq API Key</label>
+                  <div style={S.apiKeyWrap}>
+                    <Key size={16} color="var(--text-tertiary)"/>
+                    <input type={showApiKey?'text':'password'} value={keyForm.groq_key} onChange={(e) => setKeyForm(p => ({ ...p, groq_key: e.target.value }))} placeholder="Enter Groq API Key" style={S.apiInput}/>
+                    <motion.button style={S.apiBtn} onClick={()=>setShowApiKey(!showApiKey)} whileTap={{scale:0.9}}>
+                      {showApiKey?<EyeOff size={16}/>:<Eye size={16}/>}
+                    </motion.button>
+                    <motion.button style={S.apiBtn} onClick={()=>copyKey(keyForm.groq_key)} whileTap={{scale:0.9}}>
+                      {copied?<CheckCircle size={16} color="var(--success)"/>:<Copy size={16}/>}
+                    </motion.button>
                   </div>
-                <h3 style={S.cardTitle}>Feature Toggles</h3>
+                </div>
+                <div style={{...S.formGroup, marginTop:'18px'}}>
+                  <label style={S.label}>Gemini API Key</label>
+                  <div style={S.apiKeyWrap}>
+                    <Key size={16} color="var(--text-tertiary)"/>
+                    <input type={showPBKey?'text':'password'} value={keyForm.gemini_key} onChange={(e) => setKeyForm(p => ({ ...p, gemini_key: e.target.value }))} placeholder="Enter Gemini API Key" style={S.apiInput}/>
+                    <motion.button style={S.apiBtn} onClick={()=>setShowPBKey(!showPBKey)} whileTap={{scale:0.9}}>
+                      {showPBKey?<EyeOff size={16}/>:<Eye size={16}/>}
+                    </motion.button>
+                  </div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:'8px',fontSize:'12px',color:'var(--text-tertiary)',marginTop:'16px'}}><Shield size={14} color="var(--success)"/>Your API keys are encrypted and stored securely</div>
                 {keyStatus.message && (
                   <div style={{ fontSize: '12px', color: keyStatus.type === 'success' ? 'var(--success)' : 'var(--danger)', marginTop: '10px' }}>
                     {keyStatus.message}
                   </div>
                 )}
-                <div style={S.toggleList}>
+                <div style={S.formActions}>
                   <motion.button style={S.saveBtn} whileHover={{scale:1.03}} whileTap={{scale:0.97}} onClick={handleKeysSave}>Save Credentials</motion.button>
                   <button style={S.cancelBtn}>Test Connection</button>
+                </div>
+              </div>
+              <div style={S.card}>
+                <h3 style={S.cardTitle}>Feature Toggles</h3>
+                <div style={S.toggleList}>
+                  {[
+                    {key:'analytics',label:'Usage Analytics',desc:'Track and report application usage metrics',icon:BarChart2},
+                    {key:'marketing',label:'Marketing Emails',desc:'Receive product updates and feature announcements',icon:Globe},
+                  ].map(item=>{const I=item.icon;return(
+                    <div key={item.key} style={S.toggleItem}>
+                      <div style={S.toggleIcon}><I size={18} color="var(--primary)"/></div>
                       <div style={{flex:1}}><p style={S.toggleLabel}>{item.label}</p><p style={S.toggleDesc}>{item.desc}</p></div>
                       <Toggle checked={toggles[item.key]} onChange={()=>toggleSwitch(item.key)}/>
                     </div>
-                  ))}
+                  );})}
                 </div>
               </div>
             </motion.div>

@@ -42,14 +42,12 @@ import {
   X
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
-import { Responsive, WidthProvider } from 'react-grid-layout';
+import { ResponsiveGridLayout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { useAuth } from '../context/AuthContext';
 import { getDatasets } from '../api/files';
 import { askQuery } from '../api/queries';
-
-const ResponsiveGridLayout = WidthProvider(Responsive);
 const pageV = { initial: { opacity: 0 }, animate: { opacity: 1, transition: { duration: 0.4 } }, exit: { opacity: 0 } };
 
 const CHART_TYPES = [
