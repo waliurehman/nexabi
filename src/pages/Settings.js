@@ -61,7 +61,9 @@ const Settings = () => {
   }, []);
 
   const handleProfileSave = async () => {
+    console.log("Save button clicked");
     const token = localStorage.getItem('nexabi_token');
+    console.log("Token:", token ? "exists" : "missing");
     if (!token) return;
     setProfileStatus({ type: '', message: '' });
     try {
@@ -82,6 +84,7 @@ const Settings = () => {
       if (!response.ok) {
         throw new Error('Failed to save profile');
       }
+      alert('Saved!');
       setProfileStatus({ type: 'success', message: 'Saved!' });
     } catch (err) {
       setProfileStatus({ type: 'error', message: 'Failed to update profile.' });
