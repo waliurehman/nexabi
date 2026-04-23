@@ -10,7 +10,7 @@ import {
   ScatterChart, Scatter, ZAxis, ComposedChart, Treemap, FunnelChart, Funnel, LabelList, Legend,
   RadialBarChart, RadialBar
 } from 'recharts';
-import { Send, Paperclip, User, Database, FileSpreadsheet, Link2, CheckCircle, Sparkles, Copy, ThumbsUp, ThumbsDown, Settings, Download, Plus, LayoutDashboard, ChevronDown, Check, Trash2, X, Maximize2, RefreshCw, Edit3, Code, BarChart2, LineChart as LineChartIcon, PieChart as PieChartIcon, Activity, Radar as RadarIcon, Search, Menu } from 'lucide-react';
+import { Send, Paperclip, User, Database, FileSpreadsheet, Link2, CheckCircle, Sparkles, Copy, ThumbsUp, ThumbsDown, Settings, Download, Plus, LayoutDashboard, ChevronDown, Check, Trash2, X, Maximize2, RefreshCw, Edit3, Code, BarChart2, LineChart as LineChartIcon, PieChart as PieChartIcon, Activity, Radar as RadarIcon, Search, Menu, ChevronLeft, ChevronRight } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import html2canvas from 'html2canvas';
 
@@ -151,6 +151,9 @@ const defaultConfig = {
   aspectRatio: '16:9'
 };
 
+const SESSION_STORAGE_KEY = 'nexabi_sessions';
+const ACTIVE_SESSION_KEY = 'nexabi_active_session';
+
 const Query = () => {
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState('');
@@ -163,7 +166,10 @@ const Query = () => {
   const [chatHistory, setChatHistory] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeChatId, setActiveChatId] = useState(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    const saved = localStorage.getItem('sidebar_open');
+    return saved ? saved === 'true' : true;
+  });
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedChatIds, setSelectedChatIds] = useState([]);
   const [contextMenu, setContextMenu] = useState(null);
@@ -228,36 +234,60 @@ const Query = () => {
     const fetchHistory = async () => {
       if (!token) return;
       try {
-        const history = await getHistory(token);
-        setChatHistory(history || []);
-        if (history && history.length > 0) {
-          const sorted = [...history].reverse();
-          const loadedMessages = [];
-          sorted.forEach(h => {
-            const userMsgId = `${h.id}-user`;
-            const aiMsgId = `${h.id}-ai`;
-            const timeStr = new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            loadedMessages.push({
-              id: userMsgId,
-              type: 'user',
-              content: h.question || '',
-              time: timeStr
-            });
-            const parsed = parseAiResponse(h.response || '');
-            loadedMessages.push({
-              id: aiMsgId,
-              type: 'ai',
-              content: parsed.parsedContent,
-              rawContent: h.response || '',
-              chart: parsed.chartData || h.chart_data || null,
-              htmlOutput: parsed.htmlData,
-              chartSuggest: parsed.chartSuggest,
-              userPrompt: h.question || '',
-              time: timeStr
-            });
-          });
-          setMessages([...initialMessages, ...loadedMessages]);
+        const savedSessions = JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '[]');
+        const savedActive = localStorage.getItem(ACTIVE_SESSION_KEY);
+        if (savedSessions.length > 0) {
+          setChatHistory(savedSessions);
+          const nextActiveId = savedActive || savedSessions[0].id;
+          setActiveChatId(nextActiveId);
+          const activeSession = savedSessions.find(s => s.id === nextActiveId) || savedSessions[0];
+          setMessages(activeSession.messages || initialMessages);
+          return;
         }
+
+        const history = await getHistory(token);
+        const sorted = (history || []).slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        const loadedMessages = [...initialMessages];
+        const queryIds = [];
+        sorted.forEach(h => {
+          const userMsgId = `${h.id}-user`;
+          const aiMsgId = `${h.id}-ai`;
+          const timeStr = new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          queryIds.push(h.id);
+          loadedMessages.push({
+            id: userMsgId,
+            type: 'user',
+            content: h.question || '',
+            time: timeStr
+          });
+          const parsed = parseAiResponse(h.response || '');
+          loadedMessages.push({
+            id: aiMsgId,
+            type: 'ai',
+            content: parsed.parsedContent,
+            rawContent: h.response || '',
+            chart: parsed.chartData || h.chart_data || null,
+            htmlOutput: parsed.htmlData,
+            chartSuggest: parsed.chartSuggest,
+            userPrompt: h.question || '',
+            time: timeStr
+          });
+        });
+
+        const sessionId = `session-${Date.now()}`;
+        const fallbackSession = {
+          id: sessionId,
+          title: sorted[0]?.question || 'New Chat',
+          created_at: sorted[0]?.created_at || new Date().toISOString(),
+          updated_at: sorted[sorted.length - 1]?.created_at || new Date().toISOString(),
+          messages: loadedMessages,
+          queryIds
+        };
+        setChatHistory([fallbackSession]);
+        setActiveChatId(sessionId);
+        setMessages(loadedMessages);
+        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify([fallbackSession]));
+        localStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
       } catch (error) {
         console.error("Failed to load query history:", error);
       }
@@ -267,9 +297,16 @@ const Query = () => {
 
   useEffect(() => {
     if (window.innerWidth <= 1024) {
-      setIsSidebarOpen(false);
+      const saved = localStorage.getItem('sidebar_open');
+      if (saved === null) {
+        setIsSidebarOpen(false);
+      }
     }
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('sidebar_open', isSidebarOpen ? 'true' : 'false');
+  }, [isSidebarOpen]);
 
   useEffect(() => { 
     if(!activeChartConfigId && !fullscreenData) endRef.current?.scrollIntoView({ behavior: 'smooth' }); 
@@ -297,6 +334,38 @@ const Query = () => {
     setPresets(newPresets);
     localStorage.setItem('nexabi_chart_presets', JSON.stringify(newPresets));
     setPresetName('');
+  };
+
+  const persistSessions = (sessions, activeId) => {
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
+    if (activeId) {
+      localStorage.setItem(ACTIVE_SESSION_KEY, activeId);
+    }
+  };
+
+  const ensureActiveSession = () => {
+    if (activeChatId) return activeChatId;
+    if (chatHistory.length > 0) {
+      const fallbackId = chatHistory[0].id;
+      setActiveChatId(fallbackId);
+      localStorage.setItem(ACTIVE_SESSION_KEY, fallbackId);
+      setMessages(chatHistory[0].messages || initialMessages);
+      return fallbackId;
+    }
+    const newSessionId = `session-${Date.now()}`;
+    const newSession = {
+      id: newSessionId,
+      title: 'New Chat',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      messages: [...initialMessages],
+      queryIds: []
+    };
+    setChatHistory([newSession]);
+    setActiveChatId(newSessionId);
+    setMessages(newSession.messages);
+    persistSessions([newSession], newSessionId);
+    return newSessionId;
   };
 
   const parseJsonLike = (raw) => {
@@ -424,8 +493,22 @@ const Query = () => {
   };
 
   const handleNewChat = () => {
-    setMessages(initialMessages);
-    setActiveChatId(null);
+    const newSessionId = `session-${Date.now()}`;
+    const newSession = {
+      id: newSessionId,
+      title: 'New Chat',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      messages: [...initialMessages],
+      queryIds: []
+    };
+    setMessages(newSession.messages);
+    setActiveChatId(newSessionId);
+    setChatHistory(prev => {
+      const next = [newSession, ...prev];
+      persistSessions(next, newSessionId);
+      return next;
+    });
   };
 
   const handleToggleSelectMode = () => {
@@ -445,27 +528,9 @@ const Query = () => {
 
   const handleLoadChat = (chat) => {
     if (!chat) return;
-    const parsed = parseAiResponse(chat.response || '');
-    const timeStr = new Date(chat.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const userMsg = {
-      id: `${chat.id}-user`,
-      type: 'user',
-      content: chat.question || '',
-      time: timeStr
-    };
-    const aiMsg = {
-      id: `${chat.id}-ai`,
-      type: 'ai',
-      content: parsed.parsedContent,
-      rawContent: chat.response || '',
-      chart: parsed.chartData || chat.chart_data || null,
-      htmlOutput: parsed.htmlData,
-      chartSuggest: parsed.chartSuggest,
-      userPrompt: chat.question || '',
-      time: timeStr
-    };
-    setMessages([...initialMessages, userMsg, aiMsg]);
+    setMessages(chat.messages && chat.messages.length ? chat.messages : initialMessages);
     setActiveChatId(chat.id);
+    localStorage.setItem(ACTIVE_SESSION_KEY, chat.id);
     if (window.innerWidth <= 1024) {
       setIsSidebarOpen(false);
     }
@@ -474,15 +539,28 @@ const Query = () => {
   const handleDeleteChat = async (id) => {
     if (!token || !id) return;
     const prev = chatHistory;
-    setChatHistory(prev.filter(c => c.id !== id));
+    const target = prev.find(c => c.id === id);
+    const next = prev.filter(c => c.id !== id);
+    setChatHistory(next);
     if (activeChatId === id) {
-      handleNewChat();
+      if (next.length > 0) {
+        setActiveChatId(next[0].id);
+        setMessages(next[0].messages || initialMessages);
+        persistSessions(next, next[0].id);
+      } else {
+        handleNewChat();
+      }
+    } else {
+      persistSessions(next, activeChatId);
     }
     try {
-      await deleteQuery(id, token);
+      if (target?.queryIds?.length) {
+        await Promise.all(target.queryIds.map(queryId => deleteQuery(queryId, token)));
+      }
     } catch (err) {
       console.error('Failed to delete chat:', err);
       setChatHistory(prev);
+      persistSessions(prev, activeChatId);
     }
   };
 
@@ -492,15 +570,27 @@ const Query = () => {
     const remaining = prev.filter(c => !selectedChatIds.includes(c.id));
     setChatHistory(remaining);
     if (selectedChatIds.includes(activeChatId)) {
-      handleNewChat();
+      if (remaining.length > 0) {
+        setActiveChatId(remaining[0].id);
+        setMessages(remaining[0].messages || initialMessages);
+        persistSessions(remaining, remaining[0].id);
+      } else {
+        handleNewChat();
+      }
+    } else {
+      persistSessions(remaining, activeChatId);
     }
     setSelectedChatIds([]);
     setIsSelectMode(false);
     try {
-      await Promise.all(selectedChatIds.map(id => deleteQuery(id, token)));
+      const toDelete = prev.filter(c => selectedChatIds.includes(c.id)).flatMap(c => c.queryIds || []);
+      if (toDelete.length) {
+        await Promise.all(toDelete.map(queryId => deleteQuery(queryId, token)));
+      }
     } catch (err) {
       console.error('Failed to delete selected chats:', err);
       setChatHistory(prev);
+      persistSessions(prev, activeChatId);
     }
   };
 
@@ -512,10 +602,14 @@ const Query = () => {
     setChatHistory([]);
     handleNewChat();
     try {
-      await Promise.all(prev.map(c => deleteQuery(c.id, token)));
+      const toDelete = prev.flatMap(c => c.queryIds || []);
+      if (toDelete.length) {
+        await Promise.all(toDelete.map(queryId => deleteQuery(queryId, token)));
+      }
     } catch (err) {
       console.error('Failed to clear chats:', err);
       setChatHistory(prev);
+      persistSessions(prev, activeChatId);
     }
   };
 
@@ -531,12 +625,17 @@ const Query = () => {
   const handleRenameChat = (chat) => {
     const nextTitle = window.prompt('Rename chat', chat.title || chat.question || '');
     if (!nextTitle || !nextTitle.trim()) return;
-    setChatHistory(prev => prev.map(c => c.id === chat.id ? { ...c, title: nextTitle.trim() } : c));
+    setChatHistory(prev => {
+      const next = prev.map(c => c.id === chat.id ? { ...c, title: nextTitle.trim() } : c);
+      persistSessions(next, activeChatId);
+      return next;
+    });
   };
 
   const filteredChats = chatHistory.filter(c => {
     if (!searchTerm.trim()) return true;
-    const base = `${c.title || ''} ${c.question || ''} ${c.response || ''}`.toLowerCase();
+    const lastMsg = (c.messages || []).slice(-1)[0];
+    const base = `${c.title || ''} ${lastMsg?.content || ''} ${lastMsg?.rawContent || ''}`.toLowerCase();
     return base.includes(searchTerm.toLowerCase());
   });
 
@@ -555,7 +654,17 @@ const Query = () => {
     setMessages(newMessages);
     setInput('');
     setIsTyping(true);
-    setActiveChatId(null);
+    const currentSessionId = ensureActiveSession();
+    setChatHistory(prev => {
+      const next = prev.map(session => {
+        if (session.id !== currentSessionId) return session;
+        const nextMessages = [...(session.messages || initialMessages), newMessages[newMessages.length - 1]];
+        const nextTitle = session.title && session.title !== 'New Chat' ? session.title : userMsg.slice(0, 40);
+        return { ...session, title: nextTitle, updated_at: new Date().toISOString(), messages: nextMessages };
+      });
+      persistSessions(next, currentSessionId);
+      return next;
+    });
 
     const conversationHistory = newMessages.slice(1).map(m => ({
       role: m.type === 'user' ? 'user' : 'assistant',
@@ -618,9 +727,17 @@ const Query = () => {
         };
 
         setMessages(p => [...p, aiMsgObj]);
-        if (result) {
-          setChatHistory(prev => [result, ...prev]);
-        }
+        const sessionId = ensureActiveSession();
+        setChatHistory(prev => {
+          const next = prev.map(session => {
+            if (session.id !== sessionId) return session;
+            const nextMessages = [...(session.messages || initialMessages), aiMsgObj];
+            const nextQueryIds = result?.id ? [...(session.queryIds || []), result.id] : (session.queryIds || []);
+            return { ...session, updated_at: new Date().toISOString(), messages: nextMessages, queryIds: nextQueryIds };
+          });
+          persistSessions(next, sessionId);
+          return next;
+        });
       } catch (error) {
         console.error(error);
         setMessages(p => [...p, { id: Date.now(), type: 'ai', content: `Error: Could not fetch response. ${error.message}`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
@@ -729,9 +846,17 @@ IMPORTANT:
       }
 
       setMessages(p => [...p, aiMsgObj]);
-      if (result) {
-        setChatHistory(prev => [result, ...prev]);
-      }
+      const sessionId = ensureActiveSession();
+      setChatHistory(prev => {
+        const next = prev.map(session => {
+          if (session.id !== sessionId) return session;
+          const nextMessages = [...(session.messages || initialMessages), aiMsgObj];
+          const nextQueryIds = result?.id ? [...(session.queryIds || []), result.id] : (session.queryIds || []);
+          return { ...session, updated_at: new Date().toISOString(), messages: nextMessages, queryIds: nextQueryIds };
+        });
+        persistSessions(next, sessionId);
+        return next;
+      });
 
     } catch (error) {
       console.error(error);
@@ -1253,7 +1378,19 @@ IMPORTANT:
       </AnimatePresence>
 
       <div className="query-container">
-        <motion.div className={`chat-sidebar ${isSidebarOpen ? 'open' : ''}`} initial={{ x: -10, opacity: 0 }} animate={{ x: 0, opacity: 1 }}>
+        <motion.div
+          className={`chat-sidebar ${isSidebarOpen ? 'open' : ''}`}
+          initial={false}
+          animate={{ width: isSidebarOpen ? 260 : 0, opacity: isSidebarOpen ? 1 : 0, x: isSidebarOpen ? 0 : -12 }}
+          transition={{ duration: 0.25, ease: 'easeInOut' }}
+          style={{
+            padding: isSidebarOpen ? '16px 14px' : '16px 0',
+            borderRight: isSidebarOpen ? '1px solid var(--border)' : 'none',
+            overflow: 'hidden',
+            pointerEvents: isSidebarOpen ? 'auto' : 'none',
+            position: 'relative'
+          }}
+        >
           <div style={S.sidebarHeader}>
             <div style={S.brandRow}>
               <div style={S.brandDot} />
@@ -1261,11 +1398,17 @@ IMPORTANT:
             </div>
             <div style={S.sidebarHeaderActions}>
               <button style={S.selectToggleBtn} onClick={handleToggleSelectMode}>{isSelectMode ? 'Cancel' : 'Select'}</button>
-              <button className="sidebar-close" style={S.sidebarToggleBtn} onClick={() => setIsSidebarOpen(false)}>
-                <X size={16} />
-              </button>
             </div>
           </div>
+          <motion.button
+            style={S.sidebarEdgeToggle}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setIsSidebarOpen(false)}
+            aria-label="Collapse sidebar"
+          >
+            <ChevronLeft size={16} />
+          </motion.button>
           <button style={S.newChatBtn} onClick={handleNewChat}>+ New Chat</button>
 
           <div style={S.searchWrap}>
@@ -1287,7 +1430,8 @@ IMPORTANT:
               <div style={S.emptyChat}>No chats yet</div>
             ) : (
               filteredChats.map((chat, i) => {
-                const title = (chat.title || chat.question || chat.response || 'Untitled').slice(0, 35);
+                const fallbackTitle = chat.title || chat.messages?.find(m => m.type === 'user')?.content || 'Untitled';
+                const title = (fallbackTitle || 'Untitled').slice(0, 35);
                 const isSelected = selectedChatIds.includes(chat.id);
                 return (
                   <motion.div key={chat.id} className="chat-item" initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.02 }} style={{...S.chatItem, ...(activeChatId === chat.id ? S.chatItemActive : {}), ...(isSelected ? S.chatItemSelected : {})}} onClick={() => isSelectMode ? handleToggleSelectChat(chat.id) : handleLoadChat(chat)} onContextMenu={(e) => handleContextMenu(e, chat)}>
@@ -1298,7 +1442,7 @@ IMPORTANT:
                       <div style={S.chatText}>{title}{(chat.title || chat.question || chat.response || '').length > 35 ? '...' : ''}</div>
                     </div>
                     <div style={S.chatMeta}>
-                      <span style={S.chatTime}>{formatTimeAgo(chat.created_at)}</span>
+                      <span style={S.chatTime}>{formatTimeAgo(chat.updated_at || chat.created_at)}</span>
                       <button className="chat-delete" style={S.chatDeleteBtn} onClick={(e) => { e.stopPropagation(); handleDeleteChat(chat.id); }}>
                         <Trash2 size={14} />
                       </button>
@@ -1330,7 +1474,20 @@ IMPORTANT:
           </div>
         </motion.div>
         <div className="chat-area">
-          <button className="sidebar-toggle" onClick={() => setIsSidebarOpen(true)}><Menu size={18} /></button>
+          {!isSidebarOpen && (
+            <motion.button
+              className="sidebar-toggle"
+              onClick={() => setIsSidebarOpen(true)}
+              initial={{ opacity: 0, x: -6 }}
+              animate={{ opacity: 1, x: 0 }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              style={{ display: 'inline-flex' }}
+              aria-label="Expand sidebar"
+            >
+              <ChevronRight size={18} />
+            </motion.button>
+          )}
           <AnimatePresence>
             {contextMenu && (
               <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} style={{...S.contextMenu, top: contextMenu.y, left: contextMenu.x}}>
@@ -1483,7 +1640,7 @@ IMPORTANT:
         </div>
       </div>
       <style>{`
-        .chat-sidebar { width: 260px; background: var(--card); border-right: 1px solid var(--border); padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; }
+        .chat-sidebar { background: var(--card); display: flex; flex-direction: column; gap: 12px; }
         .chat-sidebar .chat-item:hover { background: var(--hover-bg); border-color: var(--border); }
         .chat-sidebar .chat-item:hover .chat-delete { opacity: 1; }
         .chat-area { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); overflow: hidden; position: relative; }
@@ -1492,7 +1649,7 @@ IMPORTANT:
           0%, 100% { opacity: 0.3; transform: scale(0.8); }
           50% { opacity: 1; transform: scale(1); }
         }
-        .query-container { display: flex; height: 100%; }
+        .query-container { display: flex; height: 100%; position: relative; }
         .side-panel { width: 300px; padding: 24px; background: var(--card); overflow-y: auto; flex-shrink: 0; }
         .messages-area { flex: 1; padding: 24px 28px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
         .input-area { padding: 16px 24px 20px; border-top: 1px solid var(--border); background: var(--card); }
@@ -1502,7 +1659,6 @@ IMPORTANT:
           .chat-sidebar { position: fixed; top: 0; left: 0; bottom: 0; z-index: 15; transform: translateX(-100%); transition: transform 0.2s ease; box-shadow: 0 12px 36px rgba(0,0,0,0.2); }
           .chat-sidebar.open { transform: translateX(0); }
           .sidebar-toggle { display: inline-flex; align-items: center; justify-content: center; }
-          .chat-sidebar .sidebar-close { display: inline-flex; }
           .side-panel { width: 100%; border-left: none; border-top: 1px solid var(--border); height: auto; max-height: 40vh; }
           .chat-area { border-right: none; }
         }
@@ -1545,6 +1701,7 @@ const S = {
   brandDot: { width: '10px', height: '10px', borderRadius: '50%', background: 'linear-gradient(135deg,#6C63FF,#3B82F6)' },
   brandTitle: { fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.02em' },
   sidebarHeaderActions: { display: 'flex', alignItems: 'center', gap: '8px' },
+  sidebarEdgeToggle: { position: 'absolute', top: '12px', right: '-12px', width: '26px', height: '26px', borderRadius: '999px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--shadow-sm)' },
   sidebarToggleBtn: { background: 'transparent', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'none' },
   selectToggleBtn: { border: '1px solid var(--border)', background: 'var(--input-bg)', borderRadius: '8px', padding: '4px 10px', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' },
   newChatBtn: { width: '100%', background: 'linear-gradient(135deg,#6C63FF,#3B82F6)', color: '#fff', border: 'none', borderRadius: '10px', padding: '10px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 6px 16px rgba(108,99,255,0.25)' },
