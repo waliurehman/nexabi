@@ -299,24 +299,101 @@ const Query = () => {
     setPresetName('');
   };
 
+  const parseJsonLike = (raw) => {
+    if (!raw || typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    try {
+      const parsed = JSON.parse(trimmed);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (err) {
+      const normalized = trimmed
+        .replace(/'/g, '"')
+        .replace(/\b([A-Za-z_][A-Za-z0-9_]*)\s*:/g, '"$1":');
+      try {
+        const parsed = JSON.parse(normalized);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+      } catch (innerErr) {
+        return null;
+      }
+    }
+  };
+
+  const isChartObject = (obj) => {
+    if (!obj || typeof obj !== 'object') return false;
+    const hasData = obj.data || obj.series || obj.values;
+    const hasMeta = obj.type || obj.chart_type || obj.xKey || obj.yKey || obj.x_axis || obj.y_axis;
+    return Boolean(hasData && hasMeta);
+  };
+
+  const extractChartObject = (obj) => {
+    if (!obj || typeof obj !== 'object') return null;
+    if (obj.CHART_DATA && typeof obj.CHART_DATA === 'object') return obj.CHART_DATA;
+    if (obj.chart_data && typeof obj.chart_data === 'object') return obj.chart_data;
+    if (isChartObject(obj)) return obj;
+    return null;
+  };
+
+  const findFirstJsonBlock = (text) => {
+    let depth = 0;
+    let start = null;
+    for (let i = 0; i < text.length; i += 1) {
+      const char = text[i];
+      if (char === '{') {
+        if (depth === 0) start = i;
+        depth += 1;
+      } else if (char === '}') {
+        if (depth > 0) depth -= 1;
+        if (depth === 0 && start !== null) {
+          return text.slice(start, i + 1);
+        }
+      }
+    }
+    return null;
+  };
+
   const parseAiResponse = (aiResponse) => {
     let parsedContent = aiResponse;
     let chartData = null;
     let htmlData = null;
     let chartSuggest = null;
 
-    const chartMatch = aiResponse.match(/\{CHART_DATA:\s*(\{[\s\S]*?\})\s*\}/);
-    if (chartMatch) {
-      try {
-        chartData = JSON.parse(chartMatch[1]);
-        parsedContent = aiResponse.replace(chartMatch[0], '').trim();
-      } catch (e) { console.error("Failed to parse chart JSON", e); }
+    const chartPatterns = [
+      /\{\s*CHART_DATA\s*:\s*(\{[\s\S]*?\})\s*\}/,
+      /\{\s*"CHART_DATA"\s*:\s*(\{[\s\S]*?\})\s*\}/,
+      /CHART_DATA\s*:\s*(\{[\s\S]*?\})/,
+    ];
+
+    const chartCandidates = [];
+    const fencedMatch = aiResponse.match(/```json\s*([\s\S]*?)\s*```/i);
+    if (fencedMatch) {
+      chartCandidates.push({ raw: fencedMatch[1], full: fencedMatch[0] });
+    }
+
+    chartPatterns.forEach((pattern) => {
+      const match = aiResponse.match(pattern);
+      if (match) chartCandidates.push({ raw: match[1], full: match[0] });
+    });
+
+    if (chartCandidates.length === 0) {
+      const jsonBlock = findFirstJsonBlock(aiResponse);
+      if (jsonBlock) chartCandidates.push({ raw: jsonBlock, full: jsonBlock });
+    }
+
+    for (let i = 0; i < chartCandidates.length; i += 1) {
+      const candidate = chartCandidates[i];
+      const parsed = parseJsonLike(candidate.raw);
+      const extracted = extractChartObject(parsed);
+      if (extracted) {
+        chartData = extracted;
+        parsedContent = aiResponse.replace(candidate.full, '').trim();
+        break;
+      }
     }
 
     const htmlMatch = aiResponse.match(/\{HTML_OUTPUT:\s*(\{[\s\S]*?\})\s*\}/);
     if (htmlMatch && !chartData) {
       try {
-        htmlData = JSON.parse(htmlMatch[1]);
+        htmlData = parseJsonLike(htmlMatch[1]);
         parsedContent = aiResponse.replace(htmlMatch[0], '').trim();
       } catch (e) { console.error("Failed to parse HTML JSON", e); }
     }
@@ -324,7 +401,7 @@ const Query = () => {
     const suggestMatch = aiResponse.match(/\{CHART_SUGGEST:\s*(\{[\s\S]*?\})\s*\}/);
     if (suggestMatch && !chartData && !htmlData) {
       try {
-        chartSuggest = JSON.parse(suggestMatch[1]);
+        chartSuggest = parseJsonLike(suggestMatch[1]);
         parsedContent = aiResponse.replace(suggestMatch[0], '').trim();
       } catch (e) { console.error("Failed to parse suggest JSON", e); }
     }
