@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Key, Link2, CreditCard, Camera, Eye, EyeOff, Copy, CheckCircle, Plus, Shield, Zap, Crown, ArrowUpRight, Database, BarChart2, Settings as SettingsIcon, Globe, Bell, Lock, Palette } from 'lucide-react';
+import { User, Key, Link2, CreditCard, Camera, Eye, EyeOff, Copy, CheckCircle, Plus, Shield, Zap, Crown, ArrowUpRight, Database, BarChart2, Settings as SettingsIcon, Globe, Bell, Lock, Palette, Edit2, X } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -15,6 +15,8 @@ const Settings = () => {
   const { user, setUser } = useAuth();
   const fileInputRef = useRef(null);
   const [activeTab,setActiveTab] = useState('profile');
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [showApiKey,setShowApiKey] = useState(false);
   const [showPBKey,setShowPBKey] = useState(false);
   const [copied,setCopied] = useState(false);
@@ -89,6 +91,7 @@ const Settings = () => {
       }
       if (setUser) setUser(prev => ({ ...prev, name: profileForm.name, role: profileForm.role, company: profileForm.company }));
       setProfileStatus({ type: 'success', message: 'Profile saved!' });
+      setIsEditMode(false);
     } catch (err) {
       setProfileStatus({ type: 'error', message: 'Failed to save profile.' });
     }
@@ -196,49 +199,104 @@ const Settings = () => {
           {activeTab==='profile'&&(
             <motion.div key="profile" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-8}} transition={{duration:0.3}}>
               <div style={S.card}>
-                <h3 style={S.cardTitle}>Personal Information</h3>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'20px'}}>
+                  <h3 style={{...S.cardTitle, marginBottom: 0}}>Personal Information</h3>
+                  {!isEditMode && (
+                    <motion.button 
+                      style={{display:'flex', alignItems:'center', gap:'6px', padding:'8px 16px', borderRadius:'10px', background:'rgba(108,99,255,0.1)', color:'var(--primary)', border:'none', fontSize:'13px', fontWeight:600, cursor:'pointer'}}
+                      whileHover={{backgroundColor:'rgba(108,99,255,0.15)'}}
+                      whileTap={{scale:0.97}}
+                      onClick={() => setIsEditMode(true)}
+                    >
+                      <Edit2 size={14}/>Edit Profile
+                    </motion.button>
+                  )}
+                </div>
                 <div style={S.avatarSection}>
-                  <div style={S.avatarLg}>
+                  <div style={{...S.avatarLg, borderRadius: '50%', overflow: 'hidden'}}>
                     {profileForm.avatar_url ? (
-                      <img src={`https://nexabi-backend-production.up.railway.app${profileForm.avatar_url}`} alt="Avatar" style={{width: '100%', height: '100%', objectFit: 'cover', borderRadius: '18px'}} />
+                      <img src={`https://nexabi-backend-production.up.railway.app${profileForm.avatar_url}`} alt="Avatar" style={{width: '100%', height: '100%', objectFit: 'cover'}} />
                     ) : (
                       <span style={S.avatarLgText}>{profileForm.name ? profileForm.name.charAt(0).toUpperCase() : 'U'}</span>
                     )}
                   </div>
-                  <div>
-                    <input 
-                      type="file" 
-                      ref={fileInputRef} 
-                      style={{ display: 'none' }} 
-                      accept="image/jpeg, image/png, image/gif" 
-                      onChange={handlePhotoUpload} 
-                    />
-                    <motion.button 
-                      style={S.avatarUpBtn} 
-                      whileHover={{scale:1.03}} 
-                      whileTap={{scale:0.97}}
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Camera size={15}/>Change Photo
-                    </motion.button>
-                    <p style={{fontSize:'11px',color:'var(--text-tertiary)'}}>JPG, PNG or GIF. Max 15MB</p>
-                  </div>
+                  {isEditMode ? (
+                    <div>
+                      <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        style={{ display: 'none' }} 
+                        accept="image/jpeg, image/png, image/gif" 
+                        onChange={handlePhotoUpload} 
+                      />
+                      <motion.button 
+                        style={S.avatarUpBtn} 
+                        whileHover={{scale:1.03}} 
+                        whileTap={{scale:0.97}}
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Camera size={15}/>Change Photo
+                      </motion.button>
+                      <p style={{fontSize:'11px',color:'var(--text-tertiary)'}}>JPG, PNG or GIF. Max 15MB</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <motion.button 
+                        style={S.avatarUpBtn} 
+                        whileHover={{scale:1.03}} 
+                        whileTap={{scale:0.97}}
+                        onClick={() => setShowPhotoModal(true)}
+                      >
+                        <Eye size={15}/>View Photo
+                      </motion.button>
+                    </div>
+                  )}
                 </div>
                 <div className="form-grid">
-                  <div style={S.formGroup}><label style={S.label}>Full Name</label><input type="text" value={profileForm.name} onChange={(e) => setProfileForm(p => ({ ...p, name: e.target.value }))} style={S.input}/></div>
-                  <div style={S.formGroup}><label style={S.label}>Email Address</label><input type="email" value={profileForm.email} onChange={(e) => setProfileForm(p => ({ ...p, email: e.target.value }))} style={S.input}/></div>
-                  <div style={S.formGroup}><label style={S.label}>Role</label><input type="text" value={profileForm.role} onChange={(e) => setProfileForm(p => ({ ...p, role: e.target.value }))} style={S.input}/></div>
-                  <div style={S.formGroup}><label style={S.label}>Company</label><input type="text" value={profileForm.company} onChange={(e) => setProfileForm(p => ({ ...p, company: e.target.value }))} style={S.input}/></div>
+                  <div style={S.formGroup}>
+                    <label style={S.label}>Full Name</label>
+                    {isEditMode ? (
+                      <input type="text" value={profileForm.name} onChange={(e) => setProfileForm(p => ({ ...p, name: e.target.value }))} style={S.input}/>
+                    ) : (
+                      <div style={S.viewField}>{profileForm.name || '-'}</div>
+                    )}
+                  </div>
+                  <div style={S.formGroup}>
+                    <label style={S.label}>Email Address</label>
+                    {isEditMode ? (
+                      <input type="email" value={profileForm.email} onChange={(e) => setProfileForm(p => ({ ...p, email: e.target.value }))} style={S.input}/>
+                    ) : (
+                      <div style={S.viewField}>{profileForm.email || '-'}</div>
+                    )}
+                  </div>
+                  <div style={S.formGroup}>
+                    <label style={S.label}>Role</label>
+                    {isEditMode ? (
+                      <input type="text" value={profileForm.role} onChange={(e) => setProfileForm(p => ({ ...p, role: e.target.value }))} style={S.input}/>
+                    ) : (
+                      <div style={S.viewField}>{profileForm.role || '-'}</div>
+                    )}
+                  </div>
+                  <div style={S.formGroup}>
+                    <label style={S.label}>Company</label>
+                    {isEditMode ? (
+                      <input type="text" value={profileForm.company} onChange={(e) => setProfileForm(p => ({ ...p, company: e.target.value }))} style={S.input}/>
+                    ) : (
+                      <div style={S.viewField}>{profileForm.company || '-'}</div>
+                    )}
+                  </div>
                 </div>
                 {profileStatus.message && (
                   <div style={{ fontSize: '12px', color: profileStatus.type === 'success' ? 'var(--success)' : 'var(--danger)', marginTop: '10px' }}>
                     {profileStatus.message}
                   </div>
                 )}
-                <div style={S.formActions}>
-                  <motion.button style={S.saveBtn} whileHover={{scale:1.03}} whileTap={{scale:0.97}} onClick={handleProfileSave}>Save Changes</motion.button>
-                  <button style={S.cancelBtn}>Cancel</button>
-                </div>
+                {isEditMode && (
+                  <div style={S.formActions}>
+                    <motion.button style={S.saveBtn} whileHover={{scale:1.03}} whileTap={{scale:0.97}} onClick={handleProfileSave}>Save Changes</motion.button>
+                    <button style={S.cancelBtn} onClick={() => { setIsEditMode(false); setProfileStatus({type:'', message:''}); }}>Cancel</button>
+                  </div>
+                )}
               </div>
               <div style={S.card}>
                 <h3 style={S.cardTitle}>Preferences</h3>
@@ -392,6 +450,41 @@ const Settings = () => {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Photo View Modal */}
+        <AnimatePresence>
+          {showPhotoModal && (
+            <motion.div 
+              style={{position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center'}}
+              initial={{opacity: 0}}
+              animate={{opacity: 1}}
+              exit={{opacity: 0}}
+              onClick={() => setShowPhotoModal(false)}
+            >
+              <motion.div 
+                style={{position: 'relative', width: '90%', maxWidth: '500px', aspectRatio: '1/1', background: 'var(--card)', borderRadius: '50%', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.4)'}}
+                initial={{scale: 0.9, y: 20}}
+                animate={{scale: 1, y: 0}}
+                exit={{scale: 0.9, y: 20}}
+                onClick={e => e.stopPropagation()}
+              >
+                <button 
+                  style={{position: 'absolute', top: '16px', right: '16px', background: 'rgba(0,0,0,0.5)', border: 'none', color: '#fff', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10}}
+                  onClick={() => setShowPhotoModal(false)}
+                >
+                  <X size={20} />
+                </button>
+                {profileForm.avatar_url ? (
+                  <img src={`https://nexabi-backend-production.up.railway.app${profileForm.avatar_url}`} alt="Avatar" style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+                ) : (
+                  <div style={{width: '100%', height: '100%', background: 'linear-gradient(135deg,#6C63FF,#3B82F6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '100px', fontWeight: 800}}>
+                    {profileForm.name ? profileForm.name.charAt(0).toUpperCase() : 'U'}
+                  </div>
+                )}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </motion.div>
   );
@@ -413,6 +506,7 @@ const S = {
   formGroup:{display:'flex',flexDirection:'column',gap:'6px'},
   label:{fontSize:'13px',fontWeight:600,color:'var(--text-secondary)'},
   input:{padding:'11px 14px',borderRadius:'10px',border:'1px solid var(--border)',fontSize:'14px',color:'var(--text-primary)',background:'var(--input-bg)'},
+  viewField:{padding:'11px 0',fontSize:'15px',color:'var(--text-primary)',fontWeight:500},
   formActions:{display:'flex',gap:'12px',marginTop:'24px'},
   saveBtn:{background:'linear-gradient(135deg,#6C63FF,#3B82F6)',color:'#fff',border:'none',borderRadius:'10px',padding:'11px 24px',fontSize:'14px',fontWeight:600,cursor:'pointer',boxShadow:'0 4px 12px rgba(108,99,255,0.25)'},
   cancelBtn:{background:'transparent',border:'1px solid var(--border)',borderRadius:'10px',padding:'11px 24px',fontSize:'14px',fontWeight:500,color:'var(--text-secondary)',cursor:'pointer'},
