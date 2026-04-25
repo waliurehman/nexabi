@@ -1199,8 +1199,40 @@ IMPORTANT:
             ))}
           </div>
 
-          <button style={S.chartActBtn}>
-            <LayoutDashboard size={14} /> Add to Dashboard
+          <button onClick={() => {
+            const currentWidgets = JSON.parse(localStorage.getItem('dashboard_widgets') || '[]');
+            const newWidget = {
+              i: `chart-${Date.now()}`,
+              type: 'chart',
+              x: 0,
+              y: Infinity,
+              w: 6,
+              h: 6,
+              data: {
+                title: chart.title || 'AI Chart',
+                chartType: chart.type || 'bar',
+                color: config.customColors[0] || THEMES.Ocean[0],
+                chartData: chart.data,
+                xKey: chart.xKey,
+                yKey: chart.yKey
+              }
+            };
+            
+            currentWidgets.push(newWidget);
+            localStorage.setItem('dashboard_widgets', JSON.stringify(currentWidgets));
+            
+            const savedLayout = localStorage.getItem('canvas_layout');
+            if (savedLayout) {
+              const parsed = JSON.parse(savedLayout);
+              parsed.widgets = [...(parsed.widgets || []), newWidget];
+              localStorage.setItem('canvas_layout', JSON.stringify(parsed));
+            } else {
+              localStorage.setItem('canvas_layout', JSON.stringify({ widgets: [newWidget], theme: 'dark' }));
+            }
+            
+            window.location.href = '/chart-builder';
+          }} style={S.chartActBtn}>
+            <LayoutDashboard size={14} /> Move to Chart Builder
           </button>
           <button onClick={() => setActiveChartConfigId(activeChartConfigId === msgId ? null : msgId)} style={{...S.chartActBtn, background: activeChartConfigId === msgId ? 'var(--primary)' : 'var(--card)', color: activeChartConfigId === msgId ? '#fff' : 'var(--text-secondary)'}}>
             <Settings size={14} /> Customize

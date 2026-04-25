@@ -6,7 +6,7 @@ import {
   Settings2, Download, Save, Grid, LayoutTemplate,
   TrendingUp, TrendingDown, MinusCircle, Move
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip } from 'recharts';
+import { BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip } from 'recharts';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import 'react-grid-layout/css/styles.css';
@@ -79,7 +79,7 @@ export const DashboardCanvas = () => {
     if (type === 'kpi') newWidget.data = { number: '1.2M', label: 'Total Revenue', trend: 'up', bg: T.cardBg };
     if (type === 'slicer') newWidget.data = { title: 'Filter By Category', options: ['Option 1', 'Option 2'], style: 'pills' };
     if (type === 'divider') newWidget.data = { color: T.border, thickness: 'medium' };
-    if (type === 'chart') newWidget.data = { title: 'New Chart', chartType: 'bar', color: T.accent };
+    if (type === 'chart') newWidget.data = { title: 'New Chart', chartType: 'bar', color: T.accent, chartData: MOCK_CHART_DATA, xKey: 'name', yKey: 'value' };
     
     setWidgets(prev => [...prev, newWidget]);
   };
@@ -113,6 +113,30 @@ export const DashboardCanvas = () => {
 
   const renderWidgetContent = (w) => {
     if (w.type === 'chart') {
+      const cData = w.data.chartData || MOCK_CHART_DATA;
+      const cType = w.data.chartType || 'bar';
+      const cXKey = w.data.xKey || 'name';
+      const cYKey = w.data.yKey || 'value';
+      const cColor = w.data.color || T.accent;
+      
+      let ChartComp = BarChart;
+      let DataComp = <Bar dataKey={cYKey} fill={cColor} radius={[4,4,0,0]} />;
+      
+      if (cType.includes('line')) {
+        ChartComp = LineChart;
+        DataComp = <Line type="monotone" dataKey={cYKey} stroke={cColor} strokeWidth={3} dot={{r:4}} />;
+      } else if (cType.includes('area')) {
+        ChartComp = AreaChart;
+        DataComp = <Area type="monotone" dataKey={cYKey} fill={cColor} fillOpacity={0.3} stroke={cColor} strokeWidth={2} />;
+      } else if (cType.includes('pie') || cType.includes('donut')) {
+        ChartComp = PieChart;
+        DataComp = (
+          <Pie data={cData} dataKey={cYKey} nameKey={cXKey} cx="50%" cy="50%" innerRadius={cType.includes('donut') ? 60 : 0} outerRadius={80}>
+            {cData.map((e, i) => <Cell key={i} fill={[cColor, '#ec4899', '#f59e0b', '#10b981', '#6366f1'][i%5]} />)}
+          </Pie>
+        );
+      }
+
       return (
         <div style={{ padding: '16px', height: '100%', display: 'flex', flexDirection: 'column' }}>
           {editMode ? (
@@ -126,13 +150,13 @@ export const DashboardCanvas = () => {
           )}
           <div style={{ flex: 1, minHeight: 0 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={MOCK_CHART_DATA}>
-                <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
-                <XAxis dataKey="name" stroke={T.text} opacity={0.5} tick={{fontSize: 12}} />
-                <YAxis stroke={T.text} opacity={0.5} tick={{fontSize: 12}} />
+              <ChartComp data={cData}>
+                {(!cType.includes('pie') && !cType.includes('donut')) && <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />}
+                {(!cType.includes('pie') && !cType.includes('donut')) && <XAxis dataKey={cXKey} stroke={T.text} opacity={0.5} tick={{fontSize: 12}} />}
+                {(!cType.includes('pie') && !cType.includes('donut')) && <YAxis stroke={T.text} opacity={0.5} tick={{fontSize: 12}} />}
                 <Tooltip contentStyle={{ background: T.cardBg, border: `1px solid ${T.border}`, color: T.text }} />
-                <Bar dataKey="value" fill={w.data.color || T.accent} radius={[4,4,0,0]} />
-              </BarChart>
+                {DataComp}
+              </ChartComp>
             </ResponsiveContainer>
           </div>
         </div>
