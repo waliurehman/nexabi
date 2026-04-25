@@ -129,7 +129,13 @@ const Topbar = ({ onToggleSidebar, isMobile }) => {
             whileHover={{ backgroundColor: 'var(--hover-bg)' }}
             onClick={() => setShowProfile(!showProfile)}
           >
-            <div style={styles.avatar}><span style={styles.avatarText}>{userInitial}</span></div>
+            <div style={styles.avatar}>
+              {user?.avatar_url ? (
+                <img src={`https://nexabi-backend-production.up.railway.app${user.avatar_url}`} alt="Avatar" style={{width: '100%', height: '100%', objectFit: 'cover', borderRadius: '10px'}} />
+              ) : (
+                <span style={styles.avatarText}>{userInitial}</span>
+              )}
+            </div>
             {!isMobile && (
               <>
                 <div style={styles.userInfo}>
@@ -152,7 +158,11 @@ const Topbar = ({ onToggleSidebar, isMobile }) => {
               >
                 <div style={styles.profileHeader}>
                   <div style={{...styles.avatar, width: '48px', height: '48px', borderRadius: '14px', marginBottom: '12px'}}>
-                    <span style={{...styles.avatarText, fontSize: '18px'}}>{userInitial}</span>
+                    {user?.avatar_url ? (
+                      <img src={`https://nexabi-backend-production.up.railway.app${user.avatar_url}`} alt="Avatar" style={{width: '100%', height: '100%', objectFit: 'cover', borderRadius: '14px'}} />
+                    ) : (
+                      <span style={{...styles.avatarText, fontSize: '18px'}}>{userInitial}</span>
+                    )}
                   </div>
                   <h4 style={{fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px'}}>{userName}</h4>
                   <p style={{fontSize: '13px', color: 'var(--text-tertiary)', marginBottom: '8px'}}>{userEmail}</p>

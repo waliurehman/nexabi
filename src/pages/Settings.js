@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Key, Link2, CreditCard, Camera, Eye, EyeOff, Copy, CheckCircle, Plus, Shield, Zap, Crown, ArrowUpRight, Database, BarChart2, Settings as SettingsIcon, Globe, Bell, Lock, Palette } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 
 const pageV = { initial:{opacity:0,y:16}, animate:{opacity:1,y:0,transition:{duration:0.4}}, exit:{opacity:0,y:-10} };
 const tabs = [
@@ -11,13 +12,15 @@ const tabs = [
 
 const Settings = () => {
   const { darkMode, toggleDarkMode } = useTheme();
+  const { user, setUser } = useAuth();
+  const fileInputRef = useRef(null);
   const [activeTab,setActiveTab] = useState('profile');
   const [showApiKey,setShowApiKey] = useState(false);
   const [showPBKey,setShowPBKey] = useState(false);
   const [copied,setCopied] = useState(false);
   const copyKey = (t) => { navigator.clipboard?.writeText(t); setCopied(true); setTimeout(()=>setCopied(false),2000); };
   const [toggles,setToggles] = useState({notifications:true,autoProcess:true,darkMode:false,twoFactor:false,analytics:true,marketing:false});
-  const [profileForm, setProfileForm] = useState({ name: '', email: '', role: '', company: '' });
+  const [profileForm, setProfileForm] = useState({ name: '', email: '', role: '', company: '', avatar_url: '' });
   const [profileStatus, setProfileStatus] = useState({ type: '', message: '' });
   const [keyForm, setKeyForm] = useState({ groq_key: '', gemini_key: '' });
   const [keyStatus, setKeyStatus] = useState({ type: '', message: '' });
@@ -51,7 +54,8 @@ const Settings = () => {
           name: data?.name || '',
           email: data?.email || '',
           role: data?.role || '',
-          company: data?.company || ''
+          company: data?.company || '',
+          avatar_url: data?.avatar_url || ''
         });
       } catch (err) {
         setProfileStatus({ type: 'error', message: 'Unable to load profile data.' });
@@ -83,9 +87,50 @@ const Settings = () => {
       if (!response.ok) {
         throw new Error('Failed to save profile');
       }
+      if (setUser) setUser(prev => ({ ...prev, name: profileForm.name, role: profileForm.role, company: profileForm.company }));
       setProfileStatus({ type: 'success', message: 'Profile saved!' });
     } catch (err) {
       setProfileStatus({ type: 'error', message: 'Failed to save profile.' });
+    }
+  };
+
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    if (!['image/jpeg', 'image/png', 'image/gif'].includes(file.type)) {
+      setProfileStatus({ type: 'error', message: 'Only JPG, PNG or GIF are allowed.' });
+      return;
+    }
+    
+    if (file.size > 2 * 1024 * 1024) {
+      setProfileStatus({ type: 'error', message: 'File size must be under 2MB.' });
+      return;
+    }
+    
+    const token = localStorage.getItem('nexabi_token');
+    if (!token) return;
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+      const response = await fetch('https://nexabi-backend-production.up.railway.app/api/auth/upload-avatar', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body: formData
+      });
+      
+      if (!response.ok) throw new Error('Upload failed');
+      
+      const data = await response.json();
+      setProfileForm(p => ({ ...p, avatar_url: data.avatar_url }));
+      if (setUser) setUser(prev => ({ ...prev, avatar_url: data.avatar_url }));
+      setProfileStatus({ type: 'success', message: 'Photo updated!' });
+    } catch (err) {
+      setProfileStatus({ type: 'error', message: 'Failed to upload photo.' });
     }
   };
 
@@ -153,9 +198,29 @@ const Settings = () => {
               <div style={S.card}>
                 <h3 style={S.cardTitle}>Personal Information</h3>
                 <div style={S.avatarSection}>
-                  <div style={S.avatarLg}><span style={S.avatarLgText}>WU</span></div>
+                  <div style={S.avatarLg}>
+                    {profileForm.avatar_url ? (
+                      <img src={`https://nexabi-backend-production.up.railway.app${profileForm.avatar_url}`} alt="Avatar" style={{width: '100%', height: '100%', objectFit: 'cover', borderRadius: '18px'}} />
+                    ) : (
+                      <span style={S.avatarLgText}>{profileForm.name ? profileForm.name.charAt(0).toUpperCase() : 'U'}</span>
+                    )}
+                  </div>
                   <div>
-                    <motion.button style={S.avatarUpBtn} whileHover={{scale:1.03}} whileTap={{scale:0.97}}><Camera size={15}/>Change Photo</motion.button>
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      style={{ display: 'none' }} 
+                      accept="image/jpeg, image/png, image/gif" 
+                      onChange={handlePhotoUpload} 
+                    />
+                    <motion.button 
+                      style={S.avatarUpBtn} 
+                      whileHover={{scale:1.03}} 
+                      whileTap={{scale:0.97}}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Camera size={15}/>Change Photo
+                    </motion.button>
                     <p style={{fontSize:'11px',color:'var(--text-tertiary)'}}>JPG, PNG or GIF. Max 2MB</p>
                   </div>
                 </div>
