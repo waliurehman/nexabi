@@ -8,7 +8,7 @@ import {
   Download, Image as ImageIcon, Trash2, Settings2, Database,
   Sparkles, LayoutDashboard, Copy, CheckCircle, BarChart as BarChartIcon,
   LineChart as LineChartIcon, PieChart as PieChartIcon, SquarePlus,
-  Loader2, X
+  Loader2, X, Wand2
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -18,6 +18,8 @@ import 'react-resizable/css/styles.css';
 import { useAuth } from '../context/AuthContext';
 import { getDatasets } from '../api/files';
 import { askQuery } from '../api/queries';
+import AutoAnalyze from '../components/AutoAnalyze';
+import PowerBITemplates from '../components/PowerBITemplates';
 
 const pageV = { initial: { opacity: 0 }, animate: { opacity: 1, transition: { duration: 0.4 } }, exit: { opacity: 0 } };
 
@@ -96,10 +98,17 @@ const buildChartFromData = (chartData) => {
   };
 };
 
+const TAB_ITEMS = [
+  { id: 'manual', label: 'Manual Builder', icon: PieChartIcon },
+  { id: 'auto', label: 'AI Auto Analyze', icon: Sparkles },
+  { id: 'templates', label: 'Power BI Templates', icon: LayoutDashboard },
+];
+
 const ChartBuilder = () => {
   const { token } = useAuth();
   const canvasRef = useRef(null);
 
+  const [activeTab, setActiveTab] = useState('manual');
   const [canvasName, setCanvasName] = useState('My Canvas');
   const [charts, setCharts] = useState([]);
   const [selectedChartId, setSelectedChartId] = useState(null);
@@ -400,8 +409,58 @@ const ChartBuilder = () => {
     return <div style={S.emptyChart}>Unsupported chart</div>;
   };
 
+  const handleAddFromExternal = (chartData) => {
+    const id = `chart-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const newChart = {
+      id,
+      title: chartData.title || 'Untitled Chart',
+      description: chartData.description || '',
+      type: chartData.type || 'bar',
+      data: Array.isArray(chartData.data) ? chartData.data : [],
+      xKey: chartData.xKey || 'name',
+      yKey: chartData.yKey || 'value',
+      colors: chartData.colors?.length ? chartData.colors : ['#6C63FF','#3B82F6','#10B981','#F59E0B'],
+      style: { bg:'white', radius:12, fontSize:'medium', legendPos:'bottom', showLegend:true, showGrid:true, showTooltip:true, animate:true },
+      layout: { x: 0, y: Infinity, w: 6, h: 8 },
+    };
+    setCharts(prev => [...prev, newChart]);
+    setSelectedChartId(newChart.id);
+    setActiveTab('manual');
+  };
+
   return (
     <motion.div style={S.page} variants={pageV} initial="initial" animate="animate" exit="exit">
+      {/* TAB SWITCHER */}
+      <div style={S.tabBar}>
+        {TAB_ITEMS.map(tab => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <motion.button
+              key={tab.id}
+              style={{...S.tabBtn, ...(isActive ? S.tabBtnActive : {})}}
+              onClick={() => setActiveTab(tab.id)}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <Icon size={16} />
+              {tab.label}
+              {isActive && <motion.div layoutId="tabIndicator" style={S.tabIndicator} />}
+            </motion.button>
+          );
+        })}
+      </div>
+
+      {/* TAB CONTENT */}
+      <AnimatePresence mode="wait">
+      {activeTab === 'auto' && (
+        <AutoAnalyze key="auto" datasets={datasets} token={token} onAddToCanvas={handleAddFromExternal} />
+      )}
+      {activeTab === 'templates' && (
+        <PowerBITemplates key="templates" datasets={datasets} token={token} onAddToCanvas={handleAddFromExternal} onSwitchToManual={() => setActiveTab('manual')} />
+      )}
+      {activeTab === 'manual' && (
+      <motion.div key="manual" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-12}} transition={{duration:0.3}} style={{flex:1,display:'flex',flexDirection:'column',gap:'16px',minHeight:0}}>
       <div style={S.toolbar}>
         <input
           value={canvasName}
@@ -597,6 +656,10 @@ const ChartBuilder = () => {
         )}
       </AnimatePresence>
 
+      </motion.div>
+      )}
+      </AnimatePresence>
+
       <style>{`
         .layout { min-height: 100%; }
         .chart-card.selected > div { box-shadow: 0 0 0 3px #6C63FF; }
@@ -611,7 +674,11 @@ const ChartBuilder = () => {
 };
 
 const S = {
-  page: { height: 'calc(100vh - var(--topbar-height))', padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: '16px' },
+  page: { height: 'calc(100vh - var(--topbar-height))', padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: '16px', overflow: 'hidden' },
+  tabBar: { display: 'flex', gap: '6px', background: 'var(--card)', padding: '6px', borderRadius: '14px', border: '1px solid var(--border)', flexShrink: 0 },
+  tabBtn: { position: 'relative', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: 'transparent', border: 'none', borderRadius: '10px', color: 'var(--text-secondary)', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'color 0.2s', flex: 1, justifyContent: 'center' },
+  tabBtnActive: { color: '#fff', background: 'linear-gradient(135deg, #6C63FF 0%, #3B82F6 100%)', boxShadow: '0 4px 16px rgba(108,99,255,0.3)' },
+  tabIndicator: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '3px', background: '#fff', borderRadius: '2px' },
   toolbar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', background: 'var(--card)', padding: '12px 20px', borderRadius: '12px', border: '1px solid var(--border)' },
   canvasNameInput: { fontSize: '18px', fontWeight: 700, border: 'none', background: 'transparent', color: 'var(--text-primary)', outline: 'none' },
   toolbarActions: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
