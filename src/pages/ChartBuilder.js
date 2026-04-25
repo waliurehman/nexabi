@@ -64,7 +64,15 @@ const ChartBuilder = () => {
   const [filters, setFilters] = useState({});
 
   useEffect(() => {
-    if (token) getDatasets(token).then(data => setDatasets(data || [])).catch(() => {});
+    const t = localStorage.getItem('nexabi_token') || token;
+    if (t) {
+      fetch('https://nexabi-backend-production.up.railway.app/api/files/datasets', {
+        headers: { Authorization: `Bearer ${t}` }
+      })
+      .then(r => r.json())
+      .then(data => setDatasets(Array.isArray(data) ? data : []))
+      .catch(() => {});
+    }
   }, [token]);
 
   const handleDatasetSelect = async (id) => {
@@ -85,7 +93,7 @@ const ChartBuilder = () => {
 
   const loadSampleData = () => {
     setRawData(SAMPLE_DATA);
-    setFilename('Manufacturing QC (Sample)');
+    setFilename('Sample data loaded (20 rows)');
   };
 
   const handleGenerate = async () => {
@@ -202,47 +210,49 @@ const ChartBuilder = () => {
   // -----------------------------------------------------
   if (step === 1 || loading) {
     return (
-      <div style={{ padding: '40px', maxWidth: '800px', margin: '0 auto', fontFamily: '"Segoe UI", sans-serif' }}>
-        <h1 style={{ fontSize: '28px', color: '#1f2937', marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Sparkles color="#6C63FF" /> AI Dashboard Builder
-        </h1>
+      <div style={{ padding: '40px', minHeight: '100vh', background: '#0B1120', color: '#ffffff', fontFamily: '"Segoe UI", sans-serif' }}>
+        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+          <h1 style={{ fontSize: '28px', color: '#ffffff', marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Sparkles color="#6C63FF" /> AI Dashboard Builder
+          </h1>
 
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '24px', marginBottom: '24px' }}>
-          <h2 style={{ fontSize: '16px', color: '#374151', marginBottom: '16px' }}>1. Select Dataset</h2>
-          <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-            <select 
-              onChange={e => handleDatasetSelect(e.target.value)}
-              style={{ flex: 1, padding: '12px', border: '1px solid #d1d5db', borderRadius: '8px', outline: 'none' }}
+          <div style={{ background: '#1a2035', border: '1px solid #2d3555', borderRadius: '12px', padding: '24px', marginBottom: '24px' }}>
+            <h2 style={{ fontSize: '16px', color: '#ffffff', marginBottom: '16px' }}>1. Select Dataset</h2>
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+              <select 
+                onChange={e => handleDatasetSelect(e.target.value)}
+                style={{ flex: 1, padding: '12px', background: '#0d1526', color: '#ffffff', border: '1px solid #2d3555', borderRadius: '8px', outline: 'none' }}
+                disabled={loading}
+              >
+                <option value="">Select from my datasets...</option>
+                {datasets.map(d => <option key={d.id} value={d.id}>{d.name || d.filename}</option>)}
+              </select>
+              <button onClick={loadSampleData} style={{ padding: '12px 24px', background: '#0B1120', color: '#ffffff', border: '1px solid #2d3555', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <PlayCircle size={18} /> Try Sample
+              </button>
+            </div>
+            {filename && <div style={{ marginTop: '12px', fontSize: '14px', color: '#10B981', fontWeight: 600 }}>✓ {filename === 'Sample data loaded (20 rows)' ? filename : `Dataset loaded: ${filename} (${rawData.length} rows)`}</div>}
+          </div>
+
+          <div style={{ background: '#1a2035', border: '1px solid #2d3555', borderRadius: '12px', padding: '24px' }}>
+            <h2 style={{ fontSize: '16px', color: '#ffffff', marginBottom: '16px' }}>2. Tell AI what to build</h2>
+            <textarea
+              value={userPrompt}
+              onChange={e => setUserPrompt(e.target.value)}
               disabled={loading}
+              placeholder="Examples:&#10;• Show me manufacturing quality analysis&#10;• Build sales dashboard with monthly trends&#10;• Create HR dashboard with department breakdown"
+              style={{ width: '100%', height: '150px', padding: '16px', background: '#0d1526', color: '#ffffff', border: '1px solid #2d3555', borderRadius: '8px', outline: 'none', resize: 'vertical', fontFamily: 'inherit', marginBottom: '20px' }}
+            />
+            <button 
+              onClick={handleGenerate}
+              disabled={loading || !rawData.length || !userPrompt}
+              style={{ width: '100%', padding: '16px', background: '#6C63FF', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 600, cursor: (loading || !rawData.length || !userPrompt) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', opacity: (loading || !rawData.length || !userPrompt) ? 0.7 : 1 }}
             >
-              <option value="">Select from my datasets...</option>
-              {datasets.map(d => <option key={d.id} value={d.id}>{d.filename}</option>)}
-            </select>
-            <button onClick={loadSampleData} style={{ padding: '12px 24px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <PlayCircle size={18} /> Try Sample
+              {loading ? <><Loader2 className="spin" size={20} /> AI is analyzing your data...</> : <><Sparkles size={20} /> Generate Dashboard</>}
             </button>
           </div>
-          {filename && <div style={{ marginTop: '12px', fontSize: '14px', color: '#10B981', fontWeight: 600 }}>✓ Dataset loaded: {filename} ({rawData.length} rows)</div>}
+          <style>{`.spin { animation: spin 1s linear infinite; } @keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
         </div>
-
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '24px' }}>
-          <h2 style={{ fontSize: '16px', color: '#374151', marginBottom: '16px' }}>2. Tell AI what to build</h2>
-          <textarea
-            value={userPrompt}
-            onChange={e => setUserPrompt(e.target.value)}
-            disabled={loading}
-            placeholder="Examples:&#10;• Show me manufacturing quality analysis&#10;• Build sales dashboard with monthly trends&#10;• Create HR dashboard with department breakdown"
-            style={{ width: '100%', height: '150px', padding: '16px', border: '1px solid #d1d5db', borderRadius: '8px', outline: 'none', resize: 'vertical', fontFamily: 'inherit', marginBottom: '20px' }}
-          />
-          <button 
-            onClick={handleGenerate}
-            disabled={loading || !rawData.length || !userPrompt}
-            style={{ width: '100%', padding: '16px', background: '#6C63FF', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 600, cursor: (loading || !rawData.length || !userPrompt) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', opacity: (loading || !rawData.length || !userPrompt) ? 0.7 : 1 }}
-          >
-            {loading ? <><Loader2 className="spin" size={20} /> AI is analyzing your data...</> : <><Sparkles size={20} /> Generate Dashboard</>}
-          </button>
-        </div>
-        <style>{`.spin { animation: spin 1s linear infinite; } @keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
