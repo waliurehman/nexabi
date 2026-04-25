@@ -1,53 +1,24 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  AreaChart,
-  Area,
-  ScatterChart,
-  Scatter,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  ResponsiveContainer,
-  Legend
+  BarChart, Bar, LineChart, Line, PieChart, Pie, AreaChart, Area, ScatterChart, Scatter,
+  Cell, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend
 } from 'recharts';
 import {
-  Maximize2,
-  Download,
-  Image as ImageIcon,
-  Plus,
-  Trash2,
-  Settings2,
-  Database,
-  Sparkles,
-  Share2,
-  LayoutDashboard,
-  Copy,
-  CheckCircle,
-  BarChart as BarChartIcon,
-  LineChart as LineChartIcon,
-  PieChart as PieChartIcon,
-  Move,
-  Pencil,
-  SquarePlus,
-  Loader2,
-  X
+  Download, Image as ImageIcon, Trash2, Settings2, Database,
+  Sparkles, LayoutDashboard, Copy, CheckCircle, BarChart as BarChartIcon,
+  LineChart as LineChartIcon, PieChart as PieChartIcon, SquarePlus,
+  Loader2, X
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { ResponsiveGridLayout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { useAuth } from '../context/AuthContext';
 import { getDatasets } from '../api/files';
 import { askQuery } from '../api/queries';
+
 const pageV = { initial: { opacity: 0 }, animate: { opacity: 1, transition: { duration: 0.4 } }, exit: { opacity: 0 } };
 
 const CHART_TYPES = [
@@ -76,8 +47,8 @@ const DEFAULT_DATA = [
 ];
 
 const DEFAULT_STYLE = {
-  bg: 'transparent',
-  radius: 10,
+  bg: 'white',
+  radius: 12,
   fontSize: 'medium',
   legendPos: 'bottom',
   showLegend: true,
@@ -86,10 +57,7 @@ const DEFAULT_STYLE = {
   animate: true,
 };
 
-const STORAGE_KEYS = {
-  autosave: 'nexabi_canvas_autosave',
-  saved: 'nexabi_saved_dashboards',
-};
+const STORAGE_KEYS = { autosave: 'nexabi_canvas_autosave', saved: 'nexabi_saved_dashboards' };
 
 const SYSTEM_PROMPT = `You are NexaBI AI Chart Builder.
 Return ONLY CHART_DATA in this exact format:
@@ -105,10 +73,10 @@ Return ONLY CHART_DATA in this exact format:
 No extra text, no markdown.`;
 
 const quickPrompts = [
-  'Make it dark theme',
-  'Add gradient',
-  'Change to pie',
-  'Make bars rounded',
+  'Revenue trend',
+  'Top categories',
+  'Compare months',
+  'Distribution breakdown',
 ];
 
 const buildChartFromData = (chartData) => {
@@ -132,14 +100,13 @@ const ChartBuilder = () => {
   const { token } = useAuth();
   const canvasRef = useRef(null);
 
-  const [canvasName, setCanvasName] = useState('My Dashboard');
+  const [canvasName, setCanvasName] = useState('My Canvas');
   const [charts, setCharts] = useState([]);
   const [selectedChartId, setSelectedChartId] = useState(null);
   const [aiInput, setAiInput] = useState('');
   const [aiMessages, setAiMessages] = useState([]);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
-  const [showEmbed, setShowEmbed] = useState(false);
   const [showLoadModal, setShowLoadModal] = useState(false);
   const [savedDashboards, setSavedDashboards] = useState([]);
   const [datasets, setDatasets] = useState([]);
@@ -150,30 +117,21 @@ const ChartBuilder = () => {
     if (autosaved) {
       try {
         const parsed = JSON.parse(autosaved);
-        setCanvasName(parsed.canvasName || 'My Dashboard');
+        setCanvasName(parsed.canvasName || 'My Canvas');
         setCharts(parsed.charts || []);
         setSelectedChartId(parsed.selectedChartId || null);
-      } catch (err) {
-        console.error('Failed to parse autosave', err);
-      }
-    } else {
-      setCharts([]);
+      } catch (err) {}
     }
 
     const saved = localStorage.getItem(STORAGE_KEYS.saved);
     if (saved) {
-      try {
-        setSavedDashboards(JSON.parse(saved));
-      } catch (err) {
-        console.error('Failed to parse saved dashboards', err);
-      }
+      try { setSavedDashboards(JSON.parse(saved)); } catch (err) {}
     }
   }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      const payload = { canvasName, charts, selectedChartId };
-      localStorage.setItem(STORAGE_KEYS.autosave, JSON.stringify(payload));
+      localStorage.setItem(STORAGE_KEYS.autosave, JSON.stringify({ canvasName, charts, selectedChartId }));
     }, 30000);
     return () => clearInterval(interval);
   }, [canvasName, charts, selectedChartId]);
@@ -184,27 +142,22 @@ const ChartBuilder = () => {
       try {
         const dataSets = await getDatasets(token);
         setDatasets(dataSets || []);
-      } catch (err) {
-        console.error('Failed to fetch datasets:', err);
-      }
+      } catch (err) {}
     };
     fetchDatasets();
   }, [token]);
 
   const selectedChart = charts.find(c => c.id === selectedChartId);
 
-  const layout = useMemo(
-    () => charts.map(chart => ({
-      i: chart.id,
-      x: chart.layout?.x ?? 0,
-      y: chart.layout?.y ?? Infinity,
-      w: chart.layout?.w ?? 6,
-      h: chart.layout?.h ?? 8,
-      minW: 3,
-      minH: 6,
-    })),
-    [charts]
-  );
+  const layout = useMemo(() => charts.map(chart => ({
+    i: chart.id,
+    x: chart.layout?.x ?? 0,
+    y: chart.layout?.y ?? Infinity,
+    w: chart.layout?.w ?? 6,
+    h: chart.layout?.h ?? 8,
+    minW: 3,
+    minH: 6,
+  })), [charts]);
 
   const updateLayout = (nextLayout) => {
     setCharts(prev => prev.map(chart => {
@@ -221,15 +174,8 @@ const ChartBuilder = () => {
       const parsed = JSON.parse(trimmed);
       return parsed && typeof parsed === 'object' ? parsed : null;
     } catch (err) {
-      const normalized = trimmed
-        .replace(/'/g, '"')
-        .replace(/\b([A-Za-z_][A-Za-z0-9_]*)\s*:/g, '"$1":');
-      try {
-        const parsed = JSON.parse(normalized);
-        return parsed && typeof parsed === 'object' ? parsed : null;
-      } catch (innerErr) {
-        return null;
-      }
+      const normalized = trimmed.replace(/'/g, '"').replace(/\b([A-Za-z_][A-Za-z0-9_]*)\s*:/g, '"$1":');
+      try { return JSON.parse(normalized); } catch (e) { return null; }
     }
   };
 
@@ -259,75 +205,41 @@ const ChartBuilder = () => {
 
   const handleUpdateSelected = (chartData) => {
     if (!selectedChartId) return;
-    setCharts(prev => prev.map(chart => {
-      if (chart.id !== selectedChartId) return chart;
-      return {
-        ...chart,
-        title: chartData?.title || chart.title,
-        description: chartData?.description || chart.description,
-        type: chartData?.type || chart.type,
-        data: Array.isArray(chartData?.data) ? chartData.data : chart.data,
-        xKey: chartData?.xKey || chart.xKey,
-        yKey: chartData?.yKey || chart.yKey,
-        colors: chartData?.colors?.length ? chartData.colors : chart.colors,
-      };
-    }));
+    setCharts(prev => prev.map(chart => chart.id === selectedChartId ? {
+      ...chart,
+      title: chartData?.title || chart.title,
+      description: chartData?.description || chart.description,
+      type: chartData?.type || chart.type,
+      data: Array.isArray(chartData?.data) ? chartData.data : chart.data,
+      xKey: chartData?.xKey || chart.xKey,
+      yKey: chartData?.yKey || chart.yKey,
+      colors: chartData?.colors?.length ? chartData.colors : chart.colors,
+    } : chart));
   };
 
   const handleAiSend = async () => {
     if (!aiInput.trim()) return;
-    if (!token) {
-      setAiError('Please sign in to use AI.');
-      return;
-    }
-    setIsAiLoading(true);
-    setAiError('');
+    if (!token) { setAiError('Please sign in to use AI.'); return; }
+    setIsAiLoading(true); setAiError('');
 
-    const nextMessage = {
-      id: `msg-${Date.now()}`,
-      prompt: aiInput.trim(),
-      response: '',
-      chartData: null,
-      createdAt: new Date().toISOString(),
-    };
+    const nextMessage = { id: `msg-${Date.now()}`, prompt: aiInput.trim(), response: '', chartData: null, createdAt: new Date().toISOString() };
     setAiMessages(prev => [nextMessage, ...prev]);
 
     const apiKey = localStorage.getItem('groq_key') || process.env.REACT_APP_GROQ_API_KEY;
-    const conversationHistory = aiMessages
-      .map(m => ([
-        { role: 'user', content: m.prompt },
-        { role: 'assistant', content: m.response || '' }
-      ]))
-      .flat();
+    const conversationHistory = aiMessages.map(m => ([{ role: 'user', content: m.prompt }, { role: 'assistant', content: m.response || '' }])).flat();
 
     try {
-      const result = await askQuery(
-        `${aiInput}\n\n${SYSTEM_PROMPT}`,
-        apiKey || null,
-        selectedDatasetId || null,
-        token,
-        'groq',
-        conversationHistory
-      );
+      const result = await askQuery(`${aiInput}\n\n${SYSTEM_PROMPT}`, apiKey || null, selectedDatasetId || null, token, 'groq', conversationHistory);
       const aiResponse = result?.response || '';
       const chartData = extractChartData(aiResponse);
 
-      setAiMessages(prev => prev.map(m => m.id === nextMessage.id
-        ? { ...m, response: aiResponse, chartData }
-        : m
-      ));
-
+      setAiMessages(prev => prev.map(m => m.id === nextMessage.id ? { ...m, response: aiResponse, chartData } : m));
       if (chartData) {
-        if (shouldApplyToSelected(aiInput)) {
-          handleUpdateSelected(chartData);
-        } else {
-          handleAddChart(chartData);
-        }
+        if (shouldApplyToSelected(aiInput)) handleUpdateSelected(chartData);
+        else handleAddChart(chartData);
       }
-
       setAiInput('');
     } catch (err) {
-      console.error(err);
       setAiError('Failed to generate chart. Try a different prompt.');
     } finally {
       setIsAiLoading(false);
@@ -335,38 +247,19 @@ const ChartBuilder = () => {
   };
 
   const handleDuplicateChart = (chart) => {
-    const clone = {
-      ...chart,
-      id: `chart-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      layout: { ...chart.layout, y: Infinity },
-    };
+    const clone = { ...chart, id: `chart-${Date.now()}`, layout: { ...chart.layout, y: Infinity } };
     setCharts(prev => [...prev, clone]);
     setSelectedChartId(clone.id);
   };
 
   const handleDeleteChart = (chartId) => {
     setCharts(prev => prev.filter(c => c.id !== chartId));
-    if (selectedChartId === chartId) {
-      setSelectedChartId(null);
-    }
-  };
-
-  const handleResizePreset = (size) => {
-    if (!selectedChartId) return;
-    const widthMap = { small: 4, medium: 6, large: 12 };
-    const nextW = widthMap[size] || 6;
-    setCharts(prev => prev.map(chart => chart.id === selectedChartId
-      ? { ...chart, layout: { ...chart.layout, w: nextW } }
-      : chart
-    ));
+    if (selectedChartId === chartId) setSelectedChartId(null);
   };
 
   const updateSelectedStyle = (updates) => {
     if (!selectedChartId) return;
-    setCharts(prev => prev.map(chart => chart.id === selectedChartId
-      ? { ...chart, style: { ...chart.style, ...updates } }
-      : chart
-    ));
+    setCharts(prev => prev.map(chart => chart.id === selectedChartId ? { ...chart, style: { ...chart.style, ...updates } } : chart));
   };
 
   const updateSelectedColors = (index, color) => {
@@ -379,55 +272,38 @@ const ChartBuilder = () => {
     }));
   };
 
-  const handleDownloadCanvasPng = async () => {
-    if (!canvasRef.current) return;
-    const canvas = await html2canvas(canvasRef.current, { backgroundColor: null, scale: 2 });
+  const handleDownloadChartPng = async (chartId, title) => {
+    const el = document.getElementById(chartId);
+    if (!el) return;
+    const canvas = await html2canvas(el, { backgroundColor: '#ffffff', scale: 2 });
     const link = document.createElement('a');
-    link.download = `${canvasName || 'dashboard'}.png`;
+    link.download = `${title || 'chart'}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
   };
 
-  const handleDownloadCanvasPdf = async () => {
+  const handleExportAllPdf = async () => {
     if (!canvasRef.current) return;
-    const canvas = await html2canvas(canvasRef.current, { backgroundColor: '#ffffff', scale: 2 });
-    const imgUrl = canvas.toDataURL('image/png');
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    printWindow.document.write(`<img src="${imgUrl}" style="width:100%;" />`);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-  };
-
-  const handleShare = async () => {
-    const link = window.location.href;
-    await navigator.clipboard.writeText(link);
-  };
-
-  const handleEmbedCopy = async () => {
-    const embed = `<iframe src="${window.location.href}" width="1200" height="800" frameborder="0"></iframe>`;
-    await navigator.clipboard.writeText(embed);
+    const canvas = await html2canvas(canvasRef.current, { backgroundColor: '#111827', scale: 2 });
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('l', 'mm', 'a4');
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    pdf.save(`${canvasName}.pdf`);
   };
 
   const handleSaveDashboard = () => {
-    const name = window.prompt('Dashboard name', canvasName);
-    if (!name) return;
-    const payload = {
-      id: `dash-${Date.now()}`,
-      name,
-      canvasName,
-      charts,
-      savedAt: new Date().toISOString(),
-    };
+    const payload = { id: `dash-${Date.now()}`, name: canvasName, canvasName, charts, savedAt: new Date().toISOString() };
     const next = [payload, ...savedDashboards];
     setSavedDashboards(next);
     localStorage.setItem(STORAGE_KEYS.saved, JSON.stringify(next));
+    alert('Layout saved successfully!');
   };
 
   const handleLoadDashboard = (dashboard) => {
     if (!dashboard) return;
-    setCanvasName(dashboard.canvasName || dashboard.name || 'My Dashboard');
+    setCanvasName(dashboard.canvasName || dashboard.name || 'My Canvas');
     setCharts(dashboard.charts || []);
     setSelectedChartId(null);
     setShowLoadModal(false);
@@ -439,17 +315,18 @@ const ChartBuilder = () => {
     const primaryYKey = chart.yKey || dataKeys[0] || 'value';
     const fontSize = chart.style.fontSize === 'small' ? 11 : chart.style.fontSize === 'large' ? 14 : 12;
     const commonProps = { data: chart.data, margin: { top: 10, right: 20, left: 0, bottom: 10 } };
-    const grid = chart.style.showGrid ? <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} /> : null;
-    const tooltip = chart.style.showTooltip ? <RechartsTooltip contentStyle={{ background: 'var(--tooltip-bg)', border: '1px solid var(--tooltip-border)', borderRadius: '8px' }} /> : null;
+    const grid = chart.style.showGrid ? <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} /> : null;
+    const tooltip = chart.style.showTooltip ? <RechartsTooltip contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', color: '#111827' }} /> : null;
     const legend = chart.style.showLegend ? <Legend verticalAlign={chart.style.legendPos} /> : null;
+    const fontColor = '#4b5563';
 
     if (chart.type === 'bar') {
       return (
         <ResponsiveContainer width="100%" height="100%">
           <BarChart {...commonProps}>
             {grid}
-            <XAxis dataKey={chart.xKey} tick={{ fontSize, fill: 'var(--chart-text)' }} />
-            <YAxis tick={{ fontSize, fill: 'var(--chart-text)' }} />
+            <XAxis dataKey={chart.xKey} tick={{ fontSize, fill: fontColor }} />
+            <YAxis tick={{ fontSize, fill: fontColor }} />
             {tooltip}
             {legend}
             {dataKeys.map((k, i) => (
@@ -459,14 +336,13 @@ const ChartBuilder = () => {
         </ResponsiveContainer>
       );
     }
-
     if (chart.type === 'line') {
       return (
         <ResponsiveContainer width="100%" height="100%">
           <LineChart {...commonProps}>
             {grid}
-            <XAxis dataKey={chart.xKey} tick={{ fontSize, fill: 'var(--chart-text)' }} />
-            <YAxis tick={{ fontSize, fill: 'var(--chart-text)' }} />
+            <XAxis dataKey={chart.xKey} tick={{ fontSize, fill: fontColor }} />
+            <YAxis tick={{ fontSize, fill: fontColor }} />
             {tooltip}
             {legend}
             {dataKeys.map((k, i) => (
@@ -476,14 +352,13 @@ const ChartBuilder = () => {
         </ResponsiveContainer>
       );
     }
-
     if (chart.type === 'area') {
       return (
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart {...commonProps}>
             {grid}
-            <XAxis dataKey={chart.xKey} tick={{ fontSize, fill: 'var(--chart-text)' }} />
-            <YAxis tick={{ fontSize, fill: 'var(--chart-text)' }} />
+            <XAxis dataKey={chart.xKey} tick={{ fontSize, fill: fontColor }} />
+            <YAxis tick={{ fontSize, fill: fontColor }} />
             {tooltip}
             {legend}
             {dataKeys.map((k, i) => (
@@ -493,7 +368,6 @@ const ChartBuilder = () => {
         </ResponsiveContainer>
       );
     }
-
     if (chart.type === 'pie' || chart.type === 'donut') {
       return (
         <ResponsiveContainer width="100%" height="100%">
@@ -509,14 +383,13 @@ const ChartBuilder = () => {
         </ResponsiveContainer>
       );
     }
-
     if (chart.type === 'scatter') {
       return (
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart {...commonProps}>
             {grid}
-            <XAxis type="category" dataKey={chart.xKey} name={chart.xKey} stroke="var(--chart-text)" />
-            <YAxis type="number" dataKey={primaryYKey} name={chart.yKey} stroke="var(--chart-text)" />
+            <XAxis type="category" dataKey={chart.xKey} name={chart.xKey} stroke={fontColor} />
+            <YAxis type="number" dataKey={primaryYKey} name={chart.yKey} stroke={fontColor} />
             {tooltip}
             {legend}
             <Scatter name={chart.title} data={chart.data} fill={chart.colors[0]} />
@@ -524,7 +397,6 @@ const ChartBuilder = () => {
         </ResponsiveContainer>
       );
     }
-
     return <div style={S.emptyChart}>Unsupported chart</div>;
   };
 
@@ -537,27 +409,23 @@ const ChartBuilder = () => {
           style={S.canvasNameInput}
         />
         <div style={S.toolbarActions}>
-          <button style={S.toolbarBtn} onClick={() => handleAddChart({})}><Plus size={16} /> Add Chart</button>
-          <button style={S.toolbarBtn} onClick={() => setCharts([])}><Trash2 size={16} /> Clear Canvas</button>
-          <button style={S.toolbarBtn} onClick={handleDownloadCanvasPng}><ImageIcon size={16} /> Download PNG</button>
-          <button style={S.toolbarBtn} onClick={handleDownloadCanvasPdf}><Download size={16} /> Download PDF</button>
-          <button style={S.toolbarBtn} onClick={handleShare}><Share2 size={16} /> Share Link</button>
-          <button style={S.toolbarBtn} onClick={() => setShowEmbed(true)}><Copy size={16} /> Embed Code</button>
-          <button style={S.toolbarBtn} onClick={handleSaveDashboard}><CheckCircle size={16} /> Save</button>
-          <button style={S.toolbarBtn} onClick={() => setShowLoadModal(true)}><LayoutDashboard size={16} /> Load</button>
+          <button style={S.toolbarBtn} onClick={handleExportAllPdf}><Download size={16} /> Export All PDF</button>
+          <button style={S.toolbarBtn} onClick={() => setShowLoadModal(true)}><LayoutDashboard size={16} /> Load Layout</button>
+          <button style={S.primaryBtn} onClick={handleSaveDashboard}><CheckCircle size={16} /> Save Layout</button>
+          <button style={S.dangerBtn} onClick={() => setCharts([])}><Trash2 size={16} /> Clear Canvas</button>
         </div>
       </div>
 
       <div style={S.layout}>
         {/* LEFT PANEL: AI CHAT */}
         <div style={S.leftPanel}>
-          <div style={S.panelHeader}><Sparkles size={18} /> AI Chart Builder</div>
+          <div style={S.panelHeader}><Sparkles size={18} color="var(--primary)"/> AI Chart Studio</div>
           <div style={S.datasetRow}>
             <Database size={16} color="var(--text-tertiary)" />
             <select value={selectedDatasetId} onChange={(e) => setSelectedDatasetId(e.target.value)} style={S.selectInput}>
               <option value="">Use dataset (optional)</option>
               {datasets.map(ds => (
-                <option key={ds.id} value={ds.id}>{ds.name || ds.filename || 'Dataset'}</option>
+                <option key={ds.id} value={ds.id}>{ds.name || ds.filename}</option>
               ))}
             </select>
           </div>
@@ -566,10 +434,10 @@ const ChartBuilder = () => {
             <textarea
               value={aiInput}
               onChange={(e) => setAiInput(e.target.value)}
-              placeholder="Create a red bar chart of monthly sales"
+              placeholder="Describe the chart you want..."
               style={S.chatInput}
             />
-            <button style={S.primaryBtn} onClick={handleAiSend} disabled={isAiLoading}>
+            <button style={S.primaryBtnFull} onClick={handleAiSend} disabled={isAiLoading}>
               {isAiLoading ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />} Generate
             </button>
             {aiError && <div style={S.errorText}>{aiError}</div>}
@@ -591,9 +459,6 @@ const ChartBuilder = () => {
                 {msg.chartData ? (
                   <div style={S.chatActions}>
                     <button style={S.chatActionBtn} onClick={() => handleAddChart(msg.chartData)}><SquarePlus size={14} /> Add to Canvas</button>
-                    {selectedChartId && (
-                      <button style={S.chatActionGhost} onClick={() => handleUpdateSelected(msg.chartData)}><Pencil size={14} /> Apply to Selected</button>
-                    )}
                   </div>
                 ) : (
                   <div style={S.chatHint}>No chart data found.</div>
@@ -604,12 +469,14 @@ const ChartBuilder = () => {
         </div>
 
         {/* CENTER PANEL: CANVAS */}
-        <div style={S.centerPanel}>
-          <div style={S.canvasWrap} ref={canvasRef}>
+        <div style={S.centerPanel} onClick={(e) => { if (e.target === e.currentTarget) setSelectedChartId(null); }}>
+          <div style={S.canvasHeader}><PieChartIcon size={18} /> Chart Canvas</div>
+          <div style={S.canvasWrap} ref={canvasRef} onClick={(e) => { if (e.target === e.currentTarget) setSelectedChartId(null); }}>
             {charts.length === 0 && (
               <div style={S.canvasEmpty}>
-                <Sparkles size={24} color="var(--primary)" />
-                <p>Ask AI to create a chart</p>
+                <PieChartIcon size={32} color="var(--primary)" style={{ opacity: 0.5, marginBottom: '16px' }} />
+                <h3 style={{ color: '#fff' }}>Generate a chart to get started</h3>
+                <p style={{ color: '#9ca3af', marginTop: '8px' }}>Use the AI Chart Studio on the left to build visuals.</p>
               </div>
             )}
             {charts.length > 0 && (
@@ -622,30 +489,22 @@ const ChartBuilder = () => {
                 rowHeight={40}
                 draggableHandle=".chart-drag-handle"
                 isResizable
+                margin={[20, 20]}
               >
                 {charts.map(chart => (
-                  <div key={chart.id} className={`chart-card ${selectedChartId === chart.id ? 'selected' : ''}`}>
-                    <div style={S.chartCard} onClick={() => setSelectedChartId(chart.id)}>
-                      <div style={S.chartHeader}>
-                        <div className="chart-drag-handle" style={S.dragHandle}><Move size={14} /></div>
+                  <div key={chart.id} className={`chart-card ${selectedChartId === chart.id ? 'selected' : ''}`} style={S.chartWrapper}>
+                    <div style={S.chartInner} onClick={(e) => { e.stopPropagation(); setSelectedChartId(chart.id); }}>
+                      <div className="chart-drag-handle" style={S.chartHeader}>
                         <div style={S.chartTitleWrap}>
-                          <h4 style={S.chartTitle}>{chart.title}</h4>
-                          {chart.description && <p style={S.chartDesc}>{chart.description}</p>}
+                          <h4 style={S.chartTitleText}>{chart.title}</h4>
+                          {chart.description && <p style={S.chartDescText}>{chart.description}</p>}
                         </div>
-                        <div style={S.chartActions}>
-                          <button style={S.iconBtn} onClick={() => setSelectedChartId(chart.id)}><Settings2 size={14} /></button>
-                          <button style={S.iconBtn} onClick={() => handleDuplicateChart(chart)}><Copy size={14} /></button>
-                          <button style={S.iconBtn} onClick={async () => {
-                            const canvas = await html2canvas(document.getElementById(chart.id), { backgroundColor: null, scale: 2 });
-                            const link = document.createElement('a');
-                            link.download = `${chart.title || 'chart'}.png`;
-                            link.href = canvas.toDataURL('image/png');
-                            link.click();
-                          }}><Download size={14} /></button>
-                          <button style={S.iconBtn} onClick={() => handleDeleteChart(chart.id)}><Trash2 size={14} /></button>
+                        <div style={S.chartActionsBar}>
+                          <button style={S.iconBtn} onClick={(e) => { e.stopPropagation(); handleDuplicateChart(chart); }}><Copy size={14} /></button>
+                          <button style={S.iconBtn} onClick={(e) => { e.stopPropagation(); handleDeleteChart(chart.id); }}><Trash2 size={14} color="#ef4444" /></button>
                         </div>
                       </div>
-                      <div id={chart.id} style={{ ...S.chartBody, background: chart.style.bg === 'dark' ? '#0B0D17' : chart.style.bg === 'white' ? '#fff' : chart.style.bg === 'gradient' ? 'linear-gradient(135deg,#6C63FF33,#3B82F633)' : 'transparent', borderRadius: chart.style.radius }}>
+                      <div id={chart.id} style={{ ...S.chartBody, background: chart.style.bg, borderRadius: chart.style.radius }}>
                         {renderChart(chart)}
                       </div>
                     </div>
@@ -658,10 +517,14 @@ const ChartBuilder = () => {
 
         {/* RIGHT PANEL: STYLE EDITOR */}
         <div style={S.rightPanel}>
-          <div style={S.panelHeader}><Settings2 size={18} /> Style Editor</div>
-          {!selectedChart && <div style={S.emptyEditor}>Select a chart to edit</div>}
+          <div style={S.panelHeader}><Settings2 size={18} color="var(--text-primary)" /> Customize</div>
+          {!selectedChart && <div style={S.emptyEditor}>Select a chart on the canvas to customize it</div>}
           {selectedChart && (
             <div style={S.editorBody}>
+              <button style={S.primaryBtnFull} onClick={() => handleDownloadChartPng(selectedChart.id, selectedChart.title)}>
+                <ImageIcon size={16} /> Download PNG
+              </button>
+
               <div style={S.section}>
                 <label style={S.label}>Chart Title</label>
                 <input value={selectedChart.title} onChange={(e) => handleUpdateSelected({ title: e.target.value })} style={S.input} />
@@ -691,9 +554,9 @@ const ChartBuilder = () => {
               <div style={S.section}>
                 <label style={S.label}>Background</label>
                 <div style={S.optionRow}>
-                  {['transparent', 'white', 'dark', 'gradient'].map(opt => (
+                  {['white', '#f9fafb', '#f3f4f6'].map(opt => (
                     <button key={opt} style={{ ...S.optionBtn, ...(selectedChart.style.bg === opt ? S.optionBtnActive : {}) }} onClick={() => updateSelectedStyle({ bg: opt })}>
-                      {opt}
+                      {opt === 'white' ? 'White' : opt === '#f9fafb' ? 'Light 1' : 'Light 2'}
                     </button>
                   ))}
                 </div>
@@ -701,72 +564,24 @@ const ChartBuilder = () => {
 
               <div style={S.section}>
                 <label style={S.label}>Border Radius</label>
-                <input type="range" min="0" max="24" value={selectedChart.style.radius} onChange={(e) => updateSelectedStyle({ radius: Number(e.target.value) })} />
+                <input type="range" min="0" max="24" value={selectedChart.style.radius} onChange={(e) => updateSelectedStyle({ radius: Number(e.target.value) })} style={{width: '100%'}}/>
               </div>
 
-              <div style={S.section}>
-                <label style={S.label}>Font Size</label>
-                <select value={selectedChart.style.fontSize} onChange={(e) => updateSelectedStyle({ fontSize: e.target.value })} style={S.selectInput}>
-                  <option value="small">Small</option>
-                  <option value="medium">Medium</option>
-                  <option value="large">Large</option>
-                </select>
-              </div>
-
-              <div style={S.section}>
-                <label style={S.label}>Legend Position</label>
-                <select value={selectedChart.style.legendPos} onChange={(e) => updateSelectedStyle({ legendPos: e.target.value })} style={S.selectInput}>
-                  <option value="top">Top</option>
-                  <option value="bottom">Bottom</option>
-                </select>
-              </div>
-
-              <div style={S.section}>
-                <label style={S.label}>Animation</label>
-                <label style={S.toggleRow}>
-                  <input type="checkbox" checked={selectedChart.style.animate} onChange={(e) => updateSelectedStyle({ animate: e.target.checked })} />
-                  Enable animations
-                </label>
-              </div>
-
-              <div style={S.section}>
-                <label style={S.label}>Size</label>
-                <div style={S.optionRow}>
-                  <button style={S.optionBtn} onClick={() => handleResizePreset('small')}>Small</button>
-                  <button style={S.optionBtn} onClick={() => handleResizePreset('medium')}>Medium</button>
-                  <button style={S.optionBtn} onClick={() => handleResizePreset('large')}>Large</button>
-                </div>
-              </div>
             </div>
           )}
         </div>
       </div>
 
       <AnimatePresence>
-        {showEmbed && (
-          <motion.div style={S.modalOverlay} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <motion.div style={S.modal} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}>
-              <div style={S.modalHeader}>
-                <h4 style={S.modalTitle}>Embed Code</h4>
-                <button style={S.iconBtn} onClick={() => setShowEmbed(false)}><X size={16} /></button>
-              </div>
-              <textarea readOnly value={`<iframe src="${window.location.href}" width="1200" height="800" frameborder="0"></iframe>`} style={S.embedBox} />
-              <button style={S.primaryBtn} onClick={handleEmbedCopy}><Copy size={16} /> Copy Embed Code</button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
         {showLoadModal && (
           <motion.div style={S.modalOverlay} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <motion.div style={S.modal} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}>
               <div style={S.modalHeader}>
-                <h4 style={S.modalTitle}>Load Dashboard</h4>
-                <button style={S.iconBtn} onClick={() => setShowLoadModal(false)}><X size={16} /></button>
+                <h4 style={S.modalTitle}>Load Layout</h4>
+                <button style={S.iconBtnTop} onClick={() => setShowLoadModal(false)}><X size={16} /></button>
               </div>
               <div style={S.loadList}>
-                {savedDashboards.length === 0 && <div style={S.emptyChat}>No saved dashboards yet.</div>}
+                {savedDashboards.length === 0 && <div style={S.emptyChat}>No saved layouts yet.</div>}
                 {savedDashboards.map(dash => (
                   <button key={dash.id} style={S.loadItem} onClick={() => handleLoadDashboard(dash)}>
                     <div>
@@ -784,83 +599,89 @@ const ChartBuilder = () => {
 
       <style>{`
         .layout { min-height: 100%; }
-        .chart-card.selected { border: 2px solid #6C63FF; border-radius: 14px; }
-        .react-grid-item > .react-resizable-handle { width: 18px; height: 18px; }
+        .chart-card.selected > div { box-shadow: 0 0 0 3px #6C63FF; }
+        .react-grid-item > .react-resizable-handle { width: 18px; height: 18px; z-index: 10; }
         .spin { animation: spin 1s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .chart-drag-handle:active { cursor: grabbing !important; }
+        .chart-drag-handle { cursor: grab; }
       `}</style>
     </motion.div>
   );
 };
 
 const S = {
-  page: { height: 'calc(100vh - var(--topbar-height))', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' },
-  toolbar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' },
-  canvasNameInput: { fontSize: '18px', fontWeight: 700, border: '1px solid var(--border)', borderRadius: '10px', padding: '8px 12px', background: 'var(--card)', color: 'var(--text-primary)' },
+  page: { height: 'calc(100vh - var(--topbar-height))', padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: '16px' },
+  toolbar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', background: 'var(--card)', padding: '12px 20px', borderRadius: '12px', border: '1px solid var(--border)' },
+  canvasNameInput: { fontSize: '18px', fontWeight: 700, border: 'none', background: 'transparent', color: 'var(--text-primary)', outline: 'none' },
   toolbarActions: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
-  toolbarBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--card)', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' },
-
-  layout: { display: 'grid', gridTemplateColumns: '320px 1fr 320px', gap: '16px', flex: 1, minHeight: 0 },
-  leftPanel: { background: 'var(--card)', borderRadius: '16px', border: '1px solid var(--border)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px', minHeight: 0 },
-  centerPanel: { background: 'var(--card)', borderRadius: '16px', border: '1px solid var(--border)', padding: '12px', minHeight: 0, display: 'flex', flexDirection: 'column' },
-  rightPanel: { background: 'var(--card)', borderRadius: '16px', border: '1px solid var(--border)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', minHeight: 0 },
-
-  panelHeader: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', borderBottom: '1px solid var(--border)', paddingBottom: '10px' },
-  datasetRow: { display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: '10px', padding: '8px 10px' },
-  selectInput: { width: '100%', border: 'none', background: 'transparent', fontSize: '12px', color: 'var(--text-primary)' },
-
-  chatInputWrap: { display: 'flex', flexDirection: 'column', gap: '8px' },
-  chatInput: { minHeight: '90px', borderRadius: '12px', border: '1px solid var(--border)', padding: '10px', fontSize: '13px', background: 'var(--input-bg)', color: 'var(--text-primary)', resize: 'vertical' },
-  primaryBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px', borderRadius: '10px', background: 'linear-gradient(135deg,#6C63FF,#3B82F6)', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 600, cursor: 'pointer' },
-  errorText: { fontSize: '12px', color: 'var(--danger)' },
-  chipsRow: { display: 'flex', flexWrap: 'wrap', gap: '6px' },
-  chip: { background: 'var(--input-bg)', border: '1px dashed var(--border)', borderRadius: '999px', padding: '6px 10px', fontSize: '11px', color: 'var(--text-secondary)', cursor: 'pointer' },
-  chatHistory: { flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' },
-  chatCard: { background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: '12px', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' },
-  chatPrompt: { fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' },
-  chatActions: { display: 'flex', gap: '6px', flexWrap: 'wrap' },
-  chatActionBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 8px', borderRadius: '8px', border: '1px solid rgba(108,99,255,0.3)', background: 'rgba(108,99,255,0.08)', fontSize: '11px', color: 'var(--primary)', cursor: 'pointer' },
-  chatActionGhost: { display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 8px', borderRadius: '8px', border: '1px solid var(--border)', background: 'transparent', fontSize: '11px', color: 'var(--text-secondary)', cursor: 'pointer' },
-  chatHint: { fontSize: '11px', color: 'var(--text-tertiary)' },
-  emptyChat: { fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '20px 0' },
-
-  canvasWrap: { flex: 1, background: 'var(--bg)', borderRadius: '14px', padding: '12px', overflow: 'auto', position: 'relative' },
-  canvasEmpty: { display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', height: '100%' },
-  chartCard: { background: 'var(--card)', borderRadius: '12px', border: '1px solid var(--border)', height: '100%', display: 'flex', flexDirection: 'column' },
-  chartHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '8px 10px', borderBottom: '1px solid var(--border)' },
-  dragHandle: { width: '26px', height: '26px', borderRadius: '8px', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', cursor: 'grab' },
-  chartTitleWrap: { flex: 1 },
-  chartTitle: { fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' },
-  chartDesc: { fontSize: '11px', color: 'var(--text-tertiary)' },
-  chartActions: { display: 'flex', gap: '6px' },
-  chartBody: { flex: 1, padding: '10px', minHeight: 240 },
-  emptyChart: { fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', paddingTop: '40px' },
-  iconBtn: { background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-
-  emptyEditor: { fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '20px 0' },
-  editorBody: { display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto' },
+  toolbarBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' },
+  primaryBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', background: 'var(--primary)', border: '1px solid var(--primary)', borderRadius: '8px', color: '#fff', fontSize: '13px', fontWeight: 600, cursor: 'pointer' },
+  dangerBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '8px', color: '#ef4444', fontSize: '13px', fontWeight: 600, cursor: 'pointer' },
+  
+  layout: { display: 'flex', gap: '16px', flex: 1, minHeight: 0 },
+  
+  leftPanel: { width: '320px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  panelHeader: { padding: '16px 20px', borderBottom: '1px solid var(--border)', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' },
+  datasetRow: { padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border)' },
+  selectInput: { flex: 1, padding: '8px', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '13px', outline: 'none' },
+  
+  chatInputWrap: { padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px', borderBottom: '1px solid var(--border)' },
+  chatInput: { width: '100%', minHeight: '80px', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px', color: 'var(--text-primary)', fontSize: '13px', resize: 'vertical', outline: 'none' },
+  primaryBtnFull: { width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', padding: '10px', background: 'var(--primary)', color: '#fff', borderRadius: '10px', fontSize: '13px', fontWeight: 600, border: 'none', cursor: 'pointer' },
+  
+  chipsRow: { display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '16px 20px', borderBottom: '1px solid var(--border)' },
+  chip: { padding: '6px 12px', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: '20px', color: 'var(--text-secondary)', fontSize: '12px', cursor: 'pointer' },
+  
+  chatHistory: { flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' },
+  chatCard: { background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px' },
+  chatPrompt: { fontSize: '13px', color: 'var(--text-primary)', marginBottom: '8px', fontWeight: 500 },
+  chatActions: { display: 'flex', gap: '8px' },
+  chatActionBtn: { display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--primary)', color: '#fff', padding: '6px 12px', borderRadius: '6px', border: 'none', fontSize: '12px', cursor: 'pointer' },
+  chatHint: { fontSize: '12px', color: 'var(--text-tertiary)' },
+  
+  centerPanel: { flex: 1, background: '#111827', border: '1px solid var(--border)', borderRadius: '16px', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  canvasHeader: { padding: '16px 20px', borderBottom: '1px solid #1f2937', fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px', background: '#1f2937' },
+  canvasWrap: { flex: 1, overflowY: 'auto', position: 'relative' },
+  canvasEmpty: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
+  
+  chartWrapper: { display: 'flex', flexDirection: 'column' },
+  chartInner: { flex: 1, background: '#fff', borderRadius: '14px', border: '1px solid #e5e7eb', overflow: 'hidden', display: 'flex', flexDirection: 'column', transition: 'box-shadow 0.2s' },
+  chartHeader: { padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f9fafb' },
+  chartTitleWrap: { display: 'flex', flexDirection: 'column' },
+  chartTitleText: { fontSize: '14px', fontWeight: 600, color: '#111827', margin: 0 },
+  chartDescText: { fontSize: '12px', color: '#6b7280', margin: 0 },
+  chartActionsBar: { display: 'flex', gap: '4px' },
+  iconBtn: { background: 'transparent', border: 'none', color: '#6b7280', padding: '4px', cursor: 'pointer', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  iconBtnTop: { background: 'transparent', border: 'none', color: 'var(--text-secondary)', padding: '4px', cursor: 'pointer', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  chartBody: { flex: 1, padding: '16px', minHeight: 0 },
+  emptyChart: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', fontSize: '13px' },
+  
+  rightPanel: { width: '300px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  emptyEditor: { padding: '32px 20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' },
+  editorBody: { padding: '20px', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px' },
   section: { display: 'flex', flexDirection: 'column', gap: '8px' },
-  label: { fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' },
-  input: { border: '1px solid var(--border)', borderRadius: '8px', padding: '8px 10px', fontSize: '12px', background: 'var(--input-bg)', color: 'var(--text-primary)' },
+  label: { fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' },
+  input: { width: '100%', padding: '8px', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '13px', outline: 'none' },
   typeGrid: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' },
-  typeCard: { display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 8px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--input-bg)', fontSize: '11px', color: 'var(--text-secondary)', cursor: 'pointer' },
-  typeCardActive: { borderColor: 'var(--primary)', color: 'var(--primary)', background: 'rgba(108,99,255,0.1)' },
+  typeCard: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', padding: '12px', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '12px' },
+  typeCardActive: { background: 'rgba(108,99,255,0.1)', borderColor: 'var(--primary)', color: 'var(--primary)' },
   colorRow: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
-  colorPicker: { width: '34px', height: '34px', border: 'none', background: 'transparent', cursor: 'pointer' },
-  optionRow: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
-  optionBtn: { padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--input-bg)', fontSize: '11px', color: 'var(--text-secondary)', cursor: 'pointer' },
-  optionBtnActive: { borderColor: 'var(--primary)', color: 'var(--primary)', background: 'rgba(108,99,255,0.08)' },
-  toggleRow: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' },
-
-  modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  modal: { width: '480px', background: 'var(--card)', borderRadius: '16px', padding: '18px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '12px' },
-  modalHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
-  modalTitle: { fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' },
-  embedBox: { width: '100%', minHeight: '120px', border: '1px solid var(--border)', borderRadius: '10px', padding: '10px', fontSize: '12px', background: 'var(--input-bg)', color: 'var(--text-primary)' },
-  loadList: { display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' },
-  loadItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--input-bg)', cursor: 'pointer' },
-  loadName: { fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' },
-  loadMeta: { fontSize: '11px', color: 'var(--text-tertiary)' },
+  colorPicker: { width: '32px', height: '32px', padding: 0, border: 'none', borderRadius: '6px', cursor: 'pointer' },
+  optionRow: { display: 'flex', gap: '8px' },
+  optionBtn: { flex: 1, padding: '8px', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-secondary)', fontSize: '12px', cursor: 'pointer' },
+  optionBtnActive: { background: 'rgba(108,99,255,0.1)', borderColor: 'var(--primary)', color: 'var(--primary)' },
+  errorText: { fontSize: '12px', color: '#ef4444' },
+  
+  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+  modal: { background: 'var(--card)', width: '400px', borderRadius: '16px', border: '1px solid var(--border)', overflow: 'hidden' },
+  modalHeader: { padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  modalTitle: { fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 },
+  loadList: { maxHeight: '300px', overflowY: 'auto', padding: '12px' },
+  loadItem: { width: '100%', padding: '12px', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', marginBottom: '8px' },
+  loadName: { fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px 0', textAlign: 'left' },
+  loadMeta: { fontSize: '12px', color: 'var(--text-tertiary)' },
+  emptyChat: { padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }
 };
 
 export default ChartBuilder;

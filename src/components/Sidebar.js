@@ -9,7 +9,6 @@ import {
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/analytics', label: 'Analytics', icon: BarChart2 },
   { path: '/query', label: 'AI Query', icon: MessageSquare },
   { path: '/chart-builder', label: 'Chart Builder', icon: PieChart },
   { path: '/upload', label: 'Upload Data', icon: Upload },
