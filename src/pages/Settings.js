@@ -103,8 +103,8 @@ const Settings = () => {
       return;
     }
     
-    if (file.size > 2 * 1024 * 1024) {
-      setProfileStatus({ type: 'error', message: 'File size must be under 2MB.' });
+    if (file.size > 15 * 1024 * 1024) {
+      setProfileStatus({ type: 'error', message: 'File size must be under 15MB.' });
       return;
     }
     
@@ -221,7 +221,7 @@ const Settings = () => {
                     >
                       <Camera size={15}/>Change Photo
                     </motion.button>
-                    <p style={{fontSize:'11px',color:'var(--text-tertiary)'}}>JPG, PNG or GIF. Max 2MB</p>
+                    <p style={{fontSize:'11px',color:'var(--text-tertiary)'}}>JPG, PNG or GIF. Max 15MB</p>
                   </div>
                 </div>
                 <div className="form-grid">
